@@ -1,4 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { timingSafeEqual } from 'crypto';
 import { getMarketplace, listMarketplaces } from '../marketplaces';
 import { calculateFees, calculateFeesWithTrace } from '../engine/fees';
 import { solveForPrice } from '../engine/solver';
@@ -13,10 +14,33 @@ import type {
 
 const PORT = Number(process.env.PORT) || 3000;
 
+/** Unset by default (open API). Set to require a bearer token on every request. */
+const API_KEY = process.env.API_KEY;
+
+/** Comma-separated list of origins allowed to call this API from a browser. Empty = no browser access. */
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
+}
+
+/** Constant-time bearer token check so failed attempts can't be timed to guess the key. */
+function checkAuth(req: IncomingMessage): void {
+  if (!API_KEY) return;
+
+  const header = req.headers.authorization;
+  const provided = header?.startsWith('Bearer ') ? header.slice(7) : '';
+
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(API_KEY);
+  const valid = providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+
+  if (!valid) throw new ApiError(401, 'Missing or invalid API key');
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +266,13 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<unknow
 // ---------------------------------------------------------------------------
 
 const server = createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -252,7 +280,11 @@ const server = createServer((req, res) => {
     return;
   }
 
-  router(req, res)
+  Promise.resolve()
+    .then(() => {
+      checkAuth(req);
+      return router(req, res);
+    })
     .then((result) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

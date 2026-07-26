@@ -2,6 +2,7 @@
 
 // src/api/server.ts
 var import_http = require("http");
+var import_crypto = require("crypto");
 
 // src/marketplaces/ebay.ts
 var ebay = {
@@ -336,12 +337,23 @@ function buildEbayCost(inputs) {
 
 // src/api/server.ts
 var PORT = Number(process.env.PORT) || 3e3;
+var API_KEY = process.env.API_KEY;
+var ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
 var ApiError = class extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
   }
 };
+function checkAuth(req) {
+  if (!API_KEY) return;
+  const header = req.headers.authorization;
+  const provided = header?.startsWith("Bearer ") ? header.slice(7) : "";
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(API_KEY);
+  const valid = providedBuf.length === expectedBuf.length && (0, import_crypto.timingSafeEqual)(providedBuf, expectedBuf);
+  if (!valid) throw new ApiError(401, "Missing or invalid API key");
+}
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -519,15 +531,22 @@ async function router(req, res) {
   throw new ApiError(404, `No route for ${method} ${pathname}`);
 }
 var server = (0, import_http.createServer)((req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
     return;
   }
-  router(req, res).then((result) => {
+  Promise.resolve().then(() => {
+    checkAuth(req);
+    return router(req, res);
+  }).then((result) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(result));
   }).catch((err) => {
