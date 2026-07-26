@@ -197,7 +197,7 @@ function renderSolverTrace(t: SolverTrace): string {
   rows += `
     <tr class="debug-total">
       <td class="debug-label">Final price</td>
-      <td colspan="3">${gbp(t.finalPrice)} — converged in ${t.iterations.length} iteration${t.iterations.length !== 1 ? 's' : ''}</td>
+      <td colspan="3">${gbp(t.finalPrice)} (converged in ${t.iterations.length} iteration${t.iterations.length !== 1 ? 's' : ''})</td>
     </tr>
   `;
 

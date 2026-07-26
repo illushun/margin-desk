@@ -5,6 +5,7 @@ import { renderBreakdown, renderSolverResult, renderError } from './render';
 import { renderDebugTrace, clearDebugTrace } from './debug';
 import { poundsToPence, percentageToRate, penceToDecimal, formatGBP } from '../utils/currency';
 import { buildEbayCost } from '../marketplaces/ebay-cost-builder';
+import { icons } from './icons';
 import type {
   CustomFee, CalculationOptions, SolverOptions,
   SolverTargetMode, ExcludableFee, DebugTrace, EbayCostTrace,
@@ -423,14 +424,14 @@ function updateSummarySheet(): void {
 
   const rows: { icon: string; key: string; val: string; step: number; visited: boolean }[] = [
     {
-      icon: '🛒',
+      icon: icons.marketplace,
       key: 'Marketplace',
       val: config ? `${config.name} / ${modeLabel}` : 'Not set',
       step: 1,
       visited: true,
     },
     {
-      icon: '💷',
+      icon: icons.cost,
       key: 'Cost',
       val: (() => {
         if (isEbay) {
@@ -448,7 +449,7 @@ function updateSummarySheet(): void {
       visited: visitedSteps.has(isEbay ? 2 : 3),
     },
     {
-      icon: '🏷',
+      icon: icons.fees,
       key: 'Fees',
       val: (() => {
         const vatReg = el<HTMLInputElement>('vat-registered').checked;
@@ -463,7 +464,7 @@ function updateSummarySheet(): void {
       visited: visitedSteps.has(3),
     },
     {
-      icon: '🎯',
+      icon: icons.target,
       key: 'Target',
       val: (() => {
         const calcMode = el<HTMLButtonElement>('bar-next').dataset.calcMode ?? 'calculate';

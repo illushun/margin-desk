@@ -617,7 +617,7 @@
     rows += `
     <tr class="debug-total">
       <td class="debug-label">Final price</td>
-      <td colspan="3">${gbp(t.finalPrice)} \u2014 converged in ${t.iterations.length} iteration${t.iterations.length !== 1 ? "s" : ""}</td>
+      <td colspan="3">${gbp(t.finalPrice)} (converged in ${t.iterations.length} iteration${t.iterations.length !== 1 ? "s" : ""})</td>
     </tr>
   `;
     return section("Solver Trace", rows);
@@ -655,6 +655,14 @@
     const shippingCost = ppIncludedInPrice ? 0 : ppCost;
     return { costPrice, shippingCost, unitCost };
   }
+
+  // src/ui/icons.ts
+  var icons = {
+    marketplace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.5 3h2l2.6 12.4a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 8H6"/></svg>',
+    cost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg>',
+    fees: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.17H4a1 1 0 0 0-1 1v5.59c0 .53.21 1.04.59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+    target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>'
+  };
 
   // src/ui/app.ts
   var customFees = [];
@@ -965,14 +973,14 @@
     const modeLabel = modeEl.options[modeEl.selectedIndex]?.text ?? "";
     const rows = [
       {
-        icon: "\u{1F6D2}",
+        icon: icons.marketplace,
         key: "Marketplace",
         val: config ? `${config.name} / ${modeLabel}` : "Not set",
         step: 1,
         visited: true
       },
       {
-        icon: "\u{1F4B7}",
+        icon: icons.cost,
         key: "Cost",
         val: (() => {
           if (isEbay) {
@@ -990,7 +998,7 @@
         visited: visitedSteps.has(isEbay ? 2 : 3)
       },
       {
-        icon: "\u{1F3F7}",
+        icon: icons.fees,
         key: "Fees",
         val: (() => {
           const vatReg = el("vat-registered").checked;
@@ -1005,7 +1013,7 @@
         visited: visitedSteps.has(3)
       },
       {
-        icon: "\u{1F3AF}",
+        icon: icons.target,
         key: "Target",
         val: (() => {
           const calcMode = el("bar-next").dataset.calcMode ?? "calculate";

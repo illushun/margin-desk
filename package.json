@@ -5,9 +5,13 @@
   "scripts": {
     "build": "npx esbuild src/ui/app.ts --bundle --outfile=dist/app.js --target=es2020",
     "watch": "npx esbuild src/ui/app.ts --bundle --outfile=dist/app.js --target=es2020 --watch",
+    "build:api": "npx esbuild src/api/server.ts --bundle --platform=node --outfile=dist/server.js --target=es2020",
+    "api": "npm run build:api && node dist/server.js",
+    "api:watch": "npx esbuild src/api/server.ts --bundle --platform=node --outfile=dist/server.js --target=es2020 --watch",
     "typecheck": "npx tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "esbuild": "^0.21.0",
     "typescript": "^5.4.0"
   }

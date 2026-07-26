@@ -1,10 +1,8 @@
-# Marketplace Pricing Calculator
+# Margin Desk
 
-A fee and profit calculator for UK online marketplaces. Built with TypeScript and plain HTML -- no framework, no runtime dependencies.
+A fee and profit calculator for UK online marketplaces. Built with TypeScript and plain HTML, no framework, no runtime dependencies for the web app itself.
 
-Supports eBay UK, Amazon UK, and B&Q Marketplace out of the box. Custom fees and VAT handling are included.
-
----
+Supports eBay UK, Amazon UK, and B&Q Marketplace out of the box. Custom fees and VAT handling are included. The same calculation engine is also exposed as a small HTTP API, so you can drive it from a script, a spreadsheet, or another service instead of the browser UI.
 
 ## Getting started
 
@@ -20,12 +18,10 @@ npm run build
 
 Then open `index.html` directly in your browser. No server required.
 
----
-
 ## Development
 
 ```bash
-# Watch mode -- rebuilds on every file save
+# Watch mode, rebuilds on every file save
 npm run watch
 
 # Type-check without building
@@ -34,15 +30,13 @@ npm run typecheck
 
 Keep a browser tab open to `index.html` and refresh after each build. Because the output is a single `dist/app.js` file, there is no dev server to configure.
 
----
-
 ## How it works
 
 ### Two modes
 
-**Calculate profit** -- enter a selling price and see the full fee breakdown, net profit, margin, and ROI.
+**Calculate profit**: enter a selling price and see the full fee breakdown, net profit, margin, and ROI.
 
-**Find selling price** -- enter a target net profit and the calculator works backwards to find the minimum price you need to charge.
+**Find selling price**: enter a target net profit and the calculator works backwards to find the minimum price you need to charge.
 
 ### VAT handling
 
@@ -60,37 +54,126 @@ Use the "Additional fees" panel to model costs the marketplace does not account 
 
 Percentage-of-profit fees are calculated after all other deductions to avoid circular dependencies.
 
----
+## HTTP API
+
+The engine (`src/engine`) is pure and framework-agnostic, so it is wrapped in a plain Node HTTP server with no extra dependencies. Start it with:
+
+```bash
+npm run api
+```
+
+This builds `dist/server.js` and runs it, listening on port 3000 by default (set `PORT` to change it). For local development with auto-rebuild:
+
+```bash
+npm run api:watch
+```
+
+then run `node dist/server.js` in a second terminal whenever you want to pick up a rebuild.
+
+All monetary values are in pence, matching the internal convention used throughout the engine.
+
+### `GET /api/marketplaces`
+
+Returns every registered marketplace config.
+
+### `GET /api/marketplaces/:id`
+
+Returns a single marketplace config, e.g. `GET /api/marketplaces/ebay-uk`. Responds `404` if the id is unknown.
+
+### `POST /api/calculate`
+
+Calculates the fee breakdown for a given selling price.
+
+```bash
+curl -X POST localhost:3000/api/calculate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketplaceId": "ebay-uk",
+    "sellingPrice": 2499,
+    "costPrice": 850,
+    "shippingCost": 350,
+    "fulfilmentModeId": "self",
+    "vatRegistered": true
+  }'
+```
+
+Add `?trace=true` to the URL to include the full fee trace (individual formulae) alongside the breakdown.
+
+### `POST /api/solve`
+
+Works backwards from a target profit or margin to find the required selling price. Same body shape as `/api/calculate` but without `sellingPrice`, plus:
+
+```json
+{
+  "targetMode": "fixed",
+  "targetNetProfit": 500
+}
+```
+
+or, for a margin target:
+
+```json
+{
+  "targetMode": "margin",
+  "targetMargin": 0.2
+}
+```
+
+### `POST /api/ebay-cost`
+
+Runs the eBay cost builder (supplier pricing to true unit cost) independently of a full calculation. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
+
+### Shared request fields
+
+Both `/api/calculate` and `/api/solve` accept:
+
+| Field | Type | Notes |
+|---|---|---|
+| `marketplaceId` | string | required, must match a registered marketplace id |
+| `costPrice` | number | required, pence |
+| `fulfilmentModeId` | string | required, must match one of the marketplace's fulfilment modes |
+| `shippingCost` | number | pence, defaults to 0 |
+| `vatRegistered` | boolean | defaults to false |
+| `vatRate` | number | decimal rate, defaults to 0.2 |
+| `weightGrams` | number | required only when the fulfilment mode uses weight bands |
+| `customFees` | array | `{ id, label, type, value }`, see `src/types.ts` |
+| `excludedFees` | array | any of `referralFee`, `paymentFee`, `fulfilmentFee`, `vatOnFees`, `shippingCost` |
+
+Errors come back as `{ "error": "message" }` with an appropriate status code (`400` for a bad request, `404` for an unknown marketplace or route).
 
 ## Project structure
 
 ```
-marketplace-calculator/
+margin-desk/
   src/
-    types.ts                  All interfaces and enums
+    types.ts                All interfaces and enums
     marketplaces/
-      ebay.ts                 eBay UK fee config
-      amazon.ts               Amazon UK fee config (FBA weight bands included)
-      bandq.ts                B&Q Marketplace fee config
-      index.ts                Registry -- single import point for all configs
+      ebay.ts               eBay UK fee config
+      amazon.ts             Amazon UK fee config (FBA weight bands included)
+      bandq.ts              B&Q Marketplace fee config
+      index.ts              Registry, single import point for all configs
+      ebay-cost-builder.ts  Supplier pricing to true unit cost
     engine/
-      fees.ts                 calculateFees(price, config, options) -> FeeBreakdown
-      solver.ts               solveForPrice(targetNet, config, options) -> SolverResult
-      vat.ts                  VAT on fees helper
+      fees.ts               calculateFees(config, options) -> FeeBreakdown
+      solver.ts             solveForPrice(config, options) -> SolverResult
+      vat.ts                VAT on fees helper
+    api/
+      server.ts             HTTP API wrapping the engine
     ui/
-      app.ts                  DOM wiring -- no fee logic here
-      render.ts               Renders breakdown table and result panels
+      app.ts                DOM wiring, no fee logic here
+      render.ts             Renders breakdown table and result panels
+      debug.ts              Renders the "show workings" trace
+      icons.ts              Inline SVG icons used in the overview sheet
     utils/
-      currency.ts             formatGBP, poundsToPence, penceToDecimal
-      math.ts                 roundPence, round2dp, safeDivide, clamp
-  index.html                  Single HTML file with embedded CSS
+      currency.ts           formatGBP, poundsToPence, penceToDecimal
+      math.ts               roundPence, round2dp, safeDivide, clamp
+  index.html                Single HTML file with embedded CSS
   dist/
-    app.js                    Compiled bundle (generated by build)
+    app.js                  Compiled browser bundle
+    server.js               Compiled API server
 ```
 
-The engine is completely decoupled from the DOM. `fees.ts` and `solver.ts` are pure functions and could be used in a Node CLI or API without modification.
-
----
+The engine is completely decoupled from both the DOM and the API layer: `fees.ts` and `solver.ts` are pure functions, and the browser UI and HTTP API are just two different callers of the same code.
 
 ## Adding a new marketplace
 
@@ -105,7 +188,7 @@ const yourPlatform: MarketplaceConfig = {
   currency: 'GBP',
 
   referralFees: [
-    { rate: 0.10 }, // 10% -- catch-all
+    { rate: 0.10 }, // 10%, catch-all
   ],
 
   closingFee: 0,
@@ -136,7 +219,7 @@ export const marketplaces: Record<string, MarketplaceConfig> = {
 };
 ```
 
-3. Run `npm run build`. The new marketplace appears in the dropdown automatically.
+3. Run `npm run build` (and `npm run build:api` if you're using the API). The new marketplace appears in the dropdown automatically, and is immediately available via `GET /api/marketplaces`.
 
 ### Tiered referral fees
 
@@ -163,13 +246,11 @@ referralFees: [
 }
 ```
 
-Fees are always in **pence**. The UI handles conversion to and from pounds.
-
----
+Fees are always in **pence**. The UI and the API both handle conversion at their own boundary; the engine itself never touches pounds.
 
 ## Tech decisions
 
-- **TypeScript** with `strict` and `exactOptionalPropertyTypes` enabled -- catches edge cases that loose configs would miss
-- **esbuild** for bundling -- compiles the full project in under 10ms
-- **Pence throughout** -- all internal arithmetic uses integers to avoid floating-point drift; conversion happens only at the UI boundary
-- **No framework** -- the engine is framework-agnostic; the UI is ~150 lines of vanilla DOM code
+- **TypeScript** with `strict` and `exactOptionalPropertyTypes` enabled, which catches edge cases that loose configs would miss
+- **esbuild** for bundling, compiles the full project in under 10ms
+- **Pence throughout**: all internal arithmetic uses integers to avoid floating-point drift; conversion happens only at the UI and API boundaries
+- **No framework**: the engine is framework-agnostic; the UI is a few hundred lines of vanilla DOM code, and the API is Node's built-in `http` module with no added dependencies
