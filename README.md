@@ -86,9 +86,49 @@ Missing or wrong keys get a `401`. Cross-origin browser requests are blocked unl
 
 Returns every registered marketplace config.
 
+```bash
+curl -H "Authorization: Bearer $API_KEY" localhost:3000/api/marketplaces
+```
+
+```json
+{
+  "marketplaces": [
+    {
+      "id": "ebay-uk",
+      "name": "eBay UK",
+      "currency": "GBP",
+      "referralFees": [{ "rate": 0.119 }],
+      "closingFee": 0,
+      "paymentFee": { "percentage": 0.003, "fixed": 30 },
+      "vatOnFees": true,
+      "fulfilmentModes": [{ "id": "self", "label": "Self-fulfilled", "fee": 0 }]
+    },
+    { "id": "amazon-uk", "name": "Amazon UK", "...": "..." },
+    { "id": "bandq-uk", "name": "B&Q Marketplace", "...": "..." }
+  ]
+}
+```
+
 ### `GET /api/marketplaces/:id`
 
-Returns a single marketplace config, e.g. `GET /api/marketplaces/ebay-uk`. Responds `404` if the id is unknown.
+Returns a single marketplace config. Responds `404` if the id is unknown.
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" localhost:3000/api/marketplaces/ebay-uk
+```
+
+```json
+{
+  "id": "ebay-uk",
+  "name": "eBay UK",
+  "currency": "GBP",
+  "referralFees": [{ "rate": 0.119 }],
+  "closingFee": 0,
+  "paymentFee": { "percentage": 0.003, "fixed": 30 },
+  "vatOnFees": true,
+  "fulfilmentModes": [{ "id": "self", "label": "Self-fulfilled", "fee": 0 }]
+}
+```
 
 ### `POST /api/calculate`
 
@@ -104,8 +144,28 @@ curl -X POST localhost:3000/api/calculate \
     "costPrice": 850,
     "shippingCost": 350,
     "fulfilmentModeId": "self",
-    "vatRegistered": true
+    "vatRegistered": false
   }'
+```
+
+```json
+{
+  "breakdown": {
+    "sellingPrice": 2499,
+    "referralFee": 297,
+    "closingFee": 0,
+    "paymentFee": 37,
+    "fulfilmentFee": 0,
+    "vatOnFees": 0,
+    "shippingCost": 350,
+    "customFees": [],
+    "totalFees": 684,
+    "costPrice": 850,
+    "netProfit": 965,
+    "netMargin": 38.62,
+    "roi": 113.53
+  }
+}
 ```
 
 Add `?trace=true` to the URL to include the full fee trace (individual formulae) alongside the breakdown.
@@ -130,9 +190,41 @@ or, for a margin target:
 }
 ```
 
+See the full worked example below.
+
 ### `POST /api/ebay-cost`
 
-Runs the eBay cost builder (supplier pricing to true unit cost) independently of a full calculation. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
+Runs the eBay cost builder (supplier pricing to true unit cost) independently of a full calculation. Useful when you want to show a seller their true unit cost before they commit to a selling price.
+
+```bash
+curl -X POST localhost:3000/api/ebay-cost \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "costPerBatch": 1200,
+    "uom": 12,
+    "qtyRequired": 1,
+    "discountRate": 0.1,
+    "packingMaterials": 30,
+    "ppCost": 350,
+    "ppIncludedInPrice": false,
+    "vatOnSellingPrice": 0,
+    "listingFee": 0,
+    "adCost": 0
+  }'
+```
+
+That's a £12 pack of 12 units, one unit needed per listing, a 10% supplier discount, 30p of packing materials, and £3.50 postage charged separately rather than baked into the price:
+
+```json
+{
+  "costPrice": 120,
+  "shippingCost": 350,
+  "unitCost": 90
+}
+```
+
+`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
 
 ### Shared request fields
 
@@ -231,6 +323,64 @@ echo sprintf('Sell at £%.2f for £%.2f profit', $requiredSellingPrice / 100, $n
 'margin_desk' => [
     'api_key' => env('MARGIN_DESK_API_KEY'),
 ],
+```
+
+## Running your own API endpoint
+
+You don't need anything special, just a server (a cheap VPS is plenty) with Node.js 18+ installed and SSH access.
+
+**1. Get the code onto the server.**
+
+```bash
+git clone https://github.com/illushun/margin-desk.git
+cd margin-desk
+```
+
+(No GitHub? `rsync -avz --exclude node_modules --exclude dist ./ user@yourserver:margin-desk` from your own machine works just as well.)
+
+**2. Install and build it.**
+
+```bash
+npm install
+npm run build:api
+```
+
+**3. Set an API key and start it.**
+
+```bash
+export API_KEY=$(openssl rand -hex 32)   # save this somewhere, you'll need it on every request
+export PORT=3000
+node dist/server.js
+```
+
+That's already a working API on `http://your-server-ip:3000`. Everything below is about making it survive reboots and giving it a proper domain.
+
+**4. Keep it running.** A plain `node` process dies the moment you close your SSH session. The simplest fix is [pm2](https://pm2.keymetrics.io):
+
+```bash
+npm install -g pm2
+API_KEY=$API_KEY pm2 start dist/server.js --name margin-desk-api
+pm2 save
+pm2 startup   # prints one command to run so pm2 restarts everything on reboot
+```
+
+If you'd rather not install anything globally, a `systemd` user service does the same job with no extra tooling, it just takes a few more lines to write by hand (a `.service` file pointing `ExecStart` at `node dist/server.js`, `systemctl --user enable --now` it, and `loginctl enable-linger $USER` so it survives logout).
+
+**5. Put it behind a real domain with HTTPS.** Running the API straight on a bare IP and port works, but a reverse proxy gets you a proper domain and a certificate. [Caddy](https://caddyserver.com) is the least fuss, since it issues and renews the certificate for you automatically:
+
+```
+# /etc/caddy/Caddyfile
+api.yourdomain.com {
+    reverse_proxy localhost:3000
+}
+```
+
+nginx plus [certbot](https://certbot.eff.org) works too, it just takes a couple more steps: an nginx site file that proxies to `localhost:3000`, then `sudo certbot --nginx -d api.yourdomain.com` to fetch the certificate and wire up HTTPS.
+
+**6. Point your domain at the server** (an A record to its IP address, either directly or through something like Cloudflare) and you're done:
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" https://api.yourdomain.com/api
 ```
 
 ## Project structure
