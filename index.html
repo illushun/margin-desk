@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Margin Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* -------------------------------------------------------------------------
+       Tokens
+    -------------------------------------------------------------------------- */
+    :root {
+      --bg:           #1c1917;
+      --surface:      #28211e;
+      --surface-2:    #332b27;
+      --surface-3:    #3d3430;
+      --border:       #3d3430;
+      --border-light: #4a413c;
+
+      --ink:          #faf7f5;
+      --ink-2:        #c4b8b1;
+      --ink-3:        #7a6d68;
+
+      --accent:       #f59e0b;
+      --accent-dim:   #78450a;
+      --accent-text:  #1c1917;
+
+      --positive:     #34d399;
+      --positive-bg:  rgba(52,211,153,0.12);
+      --negative:     #f87171;
+      --negative-bg:  rgba(248,113,113,0.12);
+      --warning:      #fbbf24;
+      --warning-bg:   rgba(251,191,36,0.12);
+
+      --f-ui:   'DM Sans', system-ui, sans-serif;
+      --f-mono: 'Spline Sans Mono', monospace;
+
+      --r-sm:  8px;
+      --r-md:  12px;
+      --r-lg:  16px;
+      --r-xl:  20px;
+
+      --t: 200ms ease;
+
+      --bar-h: 80px;
+      --top-h: 56px;
+
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    /* -------------------------------------------------------------------------
+       Reset
+    -------------------------------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; }
+
+    body {
+      font-family: var(--f-ui);
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100%;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    /* -------------------------------------------------------------------------
+       Mobile shell -- centered on desktop for preview
+    -------------------------------------------------------------------------- */
+    .app-wrap {
+      max-width: 430px;
+      margin: 0 auto;
+      min-height: 100vh;
+      position: relative;
+      background: var(--bg);
+      /* Subtle desktop shadow so it reads as a phone */
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 32px 80px rgba(0,0,0,0.6);
+    }
+
+    /* -------------------------------------------------------------------------
+       Top bar
+    -------------------------------------------------------------------------- */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: var(--top-h);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.1rem;
+    }
+
+    .topbar-back {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--surface);
+      border: none;
+      color: var(--ink-2);
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: background var(--t), color var(--t);
+      flex-shrink: 0;
+    }
+
+    .topbar-back:hover { background: var(--surface-2); color: var(--ink); }
+    .topbar-back.hidden { visibility: hidden; pointer-events: none; }
+
+    .topbar-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .topbar-title span { color: var(--accent); }
+
+    .topbar-summary-btn {
+      height: 32px;
+      padding: 0 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-light);
+      background: var(--surface);
+      color: var(--ink-2);
+      font-family: var(--f-ui);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--t), color var(--t), border-color var(--t);
+    }
+
+    .topbar-summary-btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--accent); }
+
+    /* -------------------------------------------------------------------------
+       Scroll area between topbar and bottom bar
+    -------------------------------------------------------------------------- */
+    .scroll-area {
+      padding: 1.25rem 1.1rem calc(var(--bar-h) + var(--safe-bottom) + 1rem);
+      min-height: calc(100vh - var(--top-h));
+    }
+
+    /* -------------------------------------------------------------------------
+       Step header
+    -------------------------------------------------------------------------- */
+    .step-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .step-eyebrow {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+
+    .step-heading {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      line-height: 1.2;
+    }
+
+    .step-sub {
+      font-size: 0.8rem;
+      color: var(--ink-3);
+      margin-top: 0.3rem;
+      line-height: 1.4;
+    }
+
+    /* -------------------------------------------------------------------------
+       Step panels
+    -------------------------------------------------------------------------- */
+    .step-panel { display: none; }
+    .step-panel.active { display: block; animation: slide-in 0.22s ease both; }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(14px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* -------------------------------------------------------------------------
+       Field groups
+    -------------------------------------------------------------------------- */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+    }
+
+    .field-group:last-child { margin-bottom: 0; }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .field-row .field-group { margin-bottom: 0; }
+
+    label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: 0.02em;
+    }
+
+    input[type="number"],
+    input[type="text"],
+    select {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border-light);
+      border-radius: var(--r-sm);
+      color: var(--ink);
+      font-family: var(--f-ui);
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.65rem 0.85rem;
+      outline: none;
+      transition: border-color var(--t), background var(--t), box-shadow var(--t);
+      appearance: none;
+      -webkit-appearance: none;
+      min-height: 48px; /* good touch target */
+    }
+
+    input[type="number"] { font-family: var(--f-mono); font-size: 1rem; }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus,
+    select:focus {
+      border-color: var(--accent);
+      background: var(--surface-2);
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+    }
+
+    input[readonly] { opacity: 0.4; cursor: not-allowed; }
+
+    /* -------------------------------------------------------------------------
+       Checkbox rows
+    -------------------------------------------------------------------------- */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.65rem 0;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .checkbox-row:last-child { border-bottom: none; }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 1.1rem;
+      height: 1.1rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .checkbox-row label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--ink-2);
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      line-height: 1.3;
+    }
+
+    /* -------------------------------------------------------------------------
+       Section card
+    -------------------------------------------------------------------------- */
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .section-card-title {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      padding: 0.75rem 1rem 0;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-card-body {
+      padding: 0 1rem 1rem;
+    }
+
+    /* -------------------------------------------------------------------------
+       Exclusion rows inside section card
+    -------------------------------------------------------------------------- */
+    .exclusion-row {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .exclusion-row:last-child { border-bottom: none; }
+
+    .exclusion-row input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .exclusion-row label {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--ink-2);
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    /* -------------------------------------------------------------------------
+       Custom fee list
+    -------------------------------------------------------------------------- */
+    .custom-fee-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-bottom: 0.75rem;
+    }
+
+    #custom-fee-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-top: 0.75rem;
+    }
+
+    .custom-fee-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 0.55rem 0.75rem;
+    }
+
+    .fee-label { flex: 1; font-size: 0.82rem; font-weight: 600; color: var(--ink); }
+    .fee-meta { font-family: var(--f-mono); font-size: 0.72rem; color: var(--ink-3); }
+
+    .remove-fee {
+      background: none;
+      border: none;
+      font-family: var(--f-ui);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--ink-3);
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+      border-radius: var(--r-sm);
+      transition: color var(--t), background var(--t);
+    }
+
+    .remove-fee:hover { color: var(--negative); background: var(--negative-bg); }
+
+    /* -------------------------------------------------------------------------
+       Mode toggle
+    -------------------------------------------------------------------------- */
+    .mode-toggle {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--r-md);
+      padding: 3px;
+      gap: 3px;
+      margin-bottom: 1.25rem;
+    }
+
+    .mode-btn {
+      flex: 1;
+      padding: 0.55rem;
+      border: none;
+      border-radius: calc(var(--r-md) - 3px);
+      background: transparent;
+      font-family: var(--f-ui);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      cursor: pointer;
+      transition: background var(--t), color var(--t);
+      min-height: 42px;
+    }
+
+    .mode-btn.active {
+      background: var(--surface-3);
+      color: var(--ink);
+    }
+
+    /* -------------------------------------------------------------------------
+       Ghost button
+    -------------------------------------------------------------------------- */
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.55rem 0.9rem;
+      border: 1.5px solid var(--border-light);
+      border-radius: var(--r-sm);
+      background: transparent;
+      font-family: var(--f-ui);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: border-color var(--t), color var(--t);
+      min-height: 44px;
+    }
+
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* -------------------------------------------------------------------------
+       Step warning
+    -------------------------------------------------------------------------- */
+    .step-warning {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--warning);
+      background: var(--warning-bg);
+      border: 1px solid rgba(251,191,36,0.3);
+      border-radius: var(--r-sm);
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 1rem;
+      display: none;
+      line-height: 1.4;
+    }
+
+    /* -------------------------------------------------------------------------
+       Bottom action bar
+    -------------------------------------------------------------------------- */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      height: calc(var(--bar-h) + var(--safe-bottom));
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.1rem var(--safe-bottom);
+      gap: 0.75rem;
+      z-index: 40;
+    }
+
+    /* Step dots */
+    .step-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .step-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border-light);
+      transition: background var(--t), width var(--t);
+    }
+
+    .step-dot.active {
+      background: var(--accent);
+      width: 18px;
+      border-radius: 999px;
+    }
+
+    .step-dot.complete { background: var(--positive); }
+
+    /* Primary action button in bottom bar */
+    .btn-primary {
+      flex: 1;
+      height: 48px;
+      border: none;
+      border-radius: var(--r-md);
+      background: var(--accent);
+      font-family: var(--f-ui);
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--accent-text);
+      cursor: pointer;
+      transition: background var(--t), box-shadow var(--t), transform var(--t);
+      letter-spacing: -0.01em;
+    }
+
+    .btn-primary:hover {
+      background: #fbbf24;
+      box-shadow: 0 4px 16px rgba(245,158,11,0.35);
+    }
+
+    .btn-primary:active { transform: scale(0.98); }
+
+    /* Secondary (back) in bottom bar */
+    .btn-back {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--r-md);
+      border: 1.5px solid var(--border-light);
+      background: transparent;
+      color: var(--ink-2);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: border-color var(--t), color var(--t);
+    }
+
+    .btn-back:hover { border-color: var(--ink-2); color: var(--ink); }
+    .btn-back.hidden { visibility: hidden; pointer-events: none; }
+
+    /* -------------------------------------------------------------------------
+       Result sheet overlay
+    -------------------------------------------------------------------------- */
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--t);
+    }
+
+    .sheet-backdrop.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .sheet {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(100%);
+      width: 100%;
+      max-width: 430px;
+      max-height: 90vh;
+      background: var(--surface);
+      border-radius: var(--r-xl) var(--r-xl) 0 0;
+      z-index: 70;
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sheet.open { transform: translateX(-50%) translateY(0); }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      background: var(--border-light);
+      border-radius: 2px;
+      margin: 0.75rem auto 0;
+      flex-shrink: 0;
+    }
+
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.1rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sheet-title {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .sheet-close {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: none;
+      color: var(--ink-2);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--t), color var(--t);
+    }
+
+    .sheet-close:hover { background: var(--surface-3); color: var(--ink); }
+
+    .sheet-body {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 1rem 1.1rem calc(1rem + var(--safe-bottom));
+    }
+
+    /* -------------------------------------------------------------------------
+       Result content
+    -------------------------------------------------------------------------- */
+    .result-hero {
+      background: var(--surface-2);
+      border-radius: var(--r-lg);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .result-hero-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 0.4rem;
+    }
+
+    .result-hero-amount {
+      font-family: var(--f-mono);
+      font-size: 2.5rem;
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .result-hero-amount.positive { color: var(--positive); }
+    .result-hero-amount.negative { color: var(--negative); }
+
+    .result-hero.solver-mode {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.2);
+    }
+
+    .result-hero.solver-mode .result-hero-amount { color: var(--accent); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+    }
+
+    .metric {
+      background: var(--surface-2);
+      border-radius: var(--r-md);
+      padding: 0.75rem;
+    }
+
+    .metric-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .metric-value {
+      font-family: var(--f-mono);
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .metric-value.positive { color: var(--positive); }
+    .metric-value.negative { color: var(--negative); }
+
+    /* Breakdown table */
+    .breakdown-section-title {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 0.6rem;
+    }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+    }
+
+    .breakdown-table td {
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.82rem;
+    }
+
+    .breakdown-table tr:last-child td { border-bottom: none; }
+
+    .breakdown-table .row-label { color: var(--ink-3); font-weight: 500; }
+    .breakdown-table .row-amount {
+      text-align: right;
+      font-family: var(--f-mono);
+      font-size: 0.82rem;
+      color: var(--ink-2);
+    }
+
+    .breakdown-table tr:first-child .row-label { color: var(--ink); font-weight: 600; }
+    .breakdown-table tr:first-child .row-amount { color: var(--ink); font-weight: 600; }
+    .breakdown-table tr.deduction .row-label { padding-left: 0.75rem; }
+    .breakdown-table tr.excluded { opacity: 0.3; }
+    .breakdown-table tr.excluded .row-amount { font-size: 0.72rem; }
+
+    .breakdown-table tr.summary td {
+      border-top: 1px solid var(--border-light);
+      font-weight: 700;
+      color: var(--ink);
+      padding-top: 0.55rem;
+    }
+
+    .breakdown-table tr.summary .row-amount {
+      font-family: var(--f-mono);
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    /* Show workings button inside result sheet */
+    .btn-workings {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1.5px solid var(--border-light);
+      border-radius: var(--r-md);
+      background: transparent;
+      font-family: var(--f-ui);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      cursor: pointer;
+      transition: border-color var(--t), color var(--t);
+      margin-top: 0.5rem;
+    }
+
+    .btn-workings:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Error */
+    .error-message {
+      font-size: 0.82rem;
+      color: var(--negative);
+      font-weight: 500;
+      padding: 0.5rem 0;
+    }
+
+    /* -------------------------------------------------------------------------
+       Summary sheet (overview)
+    -------------------------------------------------------------------------- */
+    .overview-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .overview-row:last-of-type { border-bottom: none; }
+    .overview-row.dimmed { opacity: 0.35; pointer-events: none; }
+
+    .overview-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--r-sm);
+      background: var(--surface-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .overview-key {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.1rem;
+    }
+
+    .overview-val {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--ink);
+      font-family: var(--f-mono);
+    }
+
+    .overview-val.placeholder {
+      font-family: var(--f-ui);
+      color: var(--ink-3);
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .overview-meta { flex: 1; }
+
+    .edit-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      font-family: var(--f-ui);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 0.25rem 0.65rem;
+      transition: background var(--t), border-color var(--t);
+      flex-shrink: 0;
+    }
+
+    .edit-btn:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+    /* -------------------------------------------------------------------------
+       Workings modal
+    -------------------------------------------------------------------------- */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 80;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--t);
+    }
+
+    .modal-backdrop.open { opacity: 1; pointer-events: all; }
+
+    .modal {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(100%);
+      width: 100%;
+      max-width: 430px;
+      max-height: 88vh;
+      background: var(--surface);
+      border-radius: var(--r-xl) var(--r-xl) 0 0;
+      z-index: 90;
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal.open { transform: translateX(-50%) translateY(0); }
+
+    .modal-handle {
+      width: 36px;
+      height: 4px;
+      background: var(--border-light);
+      border-radius: 2px;
+      margin: 0.75rem auto 0;
+      flex-shrink: 0;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 1.1rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .modal-close {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: none;
+      color: var(--ink-2);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--t);
+    }
+
+    .modal-close:hover { background: var(--surface-3); }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 1rem 1.1rem calc(1rem + var(--safe-bottom));
+    }
+
+    /* Debug content inside modal */
+    .debug-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .debug-section-title {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .debug-table { width: 100%; border-collapse: collapse; }
+
+    .debug-table td { padding: 0.3rem 0; vertical-align: top; }
+
+    .debug-label {
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      width: 34%;
+      padding-right: 0.5rem;
+    }
+
+    .debug-formula {
+      font-family: var(--f-mono);
+      font-size: 0.62rem;
+      color: var(--ink-3);
+      width: 38%;
+      padding-right: 0.5rem;
+      word-break: break-all;
+    }
+
+    .debug-result {
+      font-family: var(--f-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: right;
+      color: var(--ink);
+      width: 28%;
+    }
+
+    .debug-table tr.debug-total td {
+      border-top: 1px solid var(--border);
+      padding-top: 0.45rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .debug-table tr.debug-profit td { font-weight: 700; }
+    .debug-table tr.debug-excluded td { opacity: 0.35; }
+
+    .debug-tag {
+      font-size: 0.6rem;
+      color: var(--ink-3);
+      font-style: italic;
+      font-family: var(--f-ui);
+    }
+
+    .debug-iter-header td {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.3rem;
+    }
+
+    .debug-iter td { font-family: var(--f-mono); font-size: 0.7rem; }
+
+    .debug-empty {
+      font-size: 0.8rem;
+      color: var(--ink-3);
+      font-style: italic;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+
+    .positive { color: var(--positive); }
+    .negative { color: var(--negative); }
+
+    /* -------------------------------------------------------------------------
+       Animations
+    -------------------------------------------------------------------------- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-wrap">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <button class="topbar-back hidden" id="topbar-back">&#8592;</button>
+    <div class="topbar-title">Margin<span>Desk</span></div>
+    <button class="topbar-summary-btn" id="summary-btn">Overview</button>
+  </div>
+
+  <!-- Scrollable content -->
+  <div class="scroll-area">
+
+    <!-- Step 1: Marketplace -->
+    <div class="step-panel" id="step-panel-1">
+      <div class="step-header">
+        <p class="step-eyebrow">Step 1 of 4</p>
+        <h2 class="step-heading">Where are you selling?</h2>
+        <p class="step-sub">Choose your platform and how you will fulfil the order.</p>
+      </div>
+
+      <div class="field-group">
+        <label for="marketplace">Platform</label>
+        <select id="marketplace"></select>
+      </div>
+
+      <div class="field-group">
+        <label for="fulfilment-mode">Fulfilment method</label>
+        <select id="fulfilment-mode"></select>
+      </div>
+
+      <div class="field-group" id="weight-group" style="display:none;">
+        <label for="weight-grams">Item weight (grams)</label>
+        <input type="number" id="weight-grams" min="0" placeholder="250" />
+      </div>
+    </div>
+
+    <!-- Step 2: eBay Cost Builder -->
+    <div class="step-panel" id="step-panel-2">
+      <div class="step-header">
+        <p class="step-eyebrow" id="step-2-eyebrow">Step 2 of 4</p>
+        <h2 class="step-heading">What does it cost you?</h2>
+        <p class="step-sub">Build your true unit cost from your supplier price.</p>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label for="ebay-cost-per-batch">Supplier cost (£)</label>
+          <input type="number" id="ebay-cost-per-batch" min="0" step="0.01" placeholder="12.00" />
+        </div>
+        <div class="field-group">
+          <label for="ebay-uom">Unit of measure</label>
+          <input type="number" id="ebay-uom" min="1" step="1" placeholder="12" value="1" />
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label for="ebay-qty-required">Qty per listing</label>
+          <input type="number" id="ebay-qty-required" min="1" step="1" placeholder="1" value="1" />
+        </div>
+        <div class="field-group">
+          <label for="ebay-discount">Supplier discount (%)</label>
+          <input type="number" id="ebay-discount" min="0" max="100" step="0.1" placeholder="0" value="0" />
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label for="ebay-packing-materials">Packing materials (£)</label>
+        <input type="number" id="ebay-packing-materials" min="0" step="0.01" placeholder="0.30" value="0" />
+      </div>
+
+      <div class="section-card" style="margin-top:1rem;">
+        <p class="section-card-title">Postage and Packaging</p>
+        <div class="section-card-body">
+          <div class="field-group" style="margin-bottom:0.75rem;">
+            <label for="ebay-pp-cost">P+P cost (£)</label>
+            <input type="number" id="ebay-pp-cost" min="0" step="0.01" placeholder="3.50" value="0" />
+          </div>
+          <div class="checkbox-row" style="border:none;padding:0;">
+            <input type="checkbox" id="ebay-pp-included" />
+            <label for="ebay-pp-included">Include P+P in item price</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Fees and Adjustments -->
+    <div class="step-panel" id="step-panel-3">
+      <div class="step-header">
+        <p class="step-eyebrow" id="step-3-eyebrow">Step 3 of 4</p>
+        <h2 class="step-heading">Fees and adjustments</h2>
+        <p class="step-sub" id="step-3-sub">Configure fees and any items to exclude.</p>
+      </div>
+
+      <!-- Non-eBay cost inputs -->
+      <div id="manual-cost-group">
+        <div class="field-group">
+          <label for="cost-price">Cost price (£)</label>
+          <input type="number" id="cost-price" min="0" step="0.01" placeholder="8.50" />
+        </div>
+        <div class="field-group">
+          <label for="shipping-cost">Shipping cost (£)</label>
+          <input type="number" id="shipping-cost" min="0" step="0.01" placeholder="3.50" />
+        </div>
+      </div>
+
+      <!-- eBay-only fees -->
+      <div id="ebay-fees-group" style="display:none;">
+        <div class="field-row">
+          <div class="field-group">
+            <label for="ebay-vat-amount">VAT on selling price (£)</label>
+            <input type="number" id="ebay-vat-amount" min="0" step="0.01" placeholder="4.00" value="0" />
+          </div>
+          <div class="field-group">
+            <label for="ebay-listing-fee">Listing fee (£)</label>
+            <input type="number" id="ebay-listing-fee" min="0" step="0.01" placeholder="0.35" value="0" />
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="ebay-ad-cost">Ad / promoted listings (£)</label>
+          <input type="number" id="ebay-ad-cost" min="0" step="0.01" placeholder="0.50" value="0" />
+        </div>
+      </div>
+
+      <!-- VAT toggle -->
+      <div class="section-card" style="margin-top:0.5rem;">
+        <div class="section-card-body" style="padding-top:0.75rem;">
+          <div class="checkbox-row" style="border:none;padding:0;">
+            <input type="checkbox" id="vat-registered" />
+            <label for="vat-registered">I am VAT registered (20%)</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Exclusions -->
+      <div class="section-card" style="margin-top:1rem;">
+        <p class="section-card-title">Exclude from calculation</p>
+        <div class="exclusion-row">
+          <input type="checkbox" id="exclude-referralFee" />
+          <label for="exclude-referralFee">Referral fee</label>
+        </div>
+        <div class="exclusion-row">
+          <input type="checkbox" id="exclude-paymentFee" />
+          <label for="exclude-paymentFee">Payment processing fee</label>
+        </div>
+        <div class="exclusion-row">
+          <input type="checkbox" id="exclude-fulfilmentFee" />
+          <label for="exclude-fulfilmentFee">Fulfilment fee</label>
+        </div>
+        <div class="exclusion-row">
+          <input type="checkbox" id="exclude-shippingCost" />
+          <label for="exclude-shippingCost">Shipping cost</label>
+        </div>
+        <div class="exclusion-row">
+          <input type="checkbox" id="exclude-vatOnFees" />
+          <label for="exclude-vatOnFees">VAT on fees</label>
+        </div>
+      </div>
+
+      <!-- Additional fees -->
+      <div class="section-card" style="margin-top:1rem;">
+        <p class="section-card-title">Additional fees</p>
+        <div class="section-card-body">
+          <div class="custom-fee-inputs">
+            <div class="field-group">
+              <label for="custom-fee-label">Label</label>
+              <input type="text" id="custom-fee-label" placeholder="e.g. Packaging" />
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label for="custom-fee-type">Type</label>
+                <select id="custom-fee-type">
+                  <option value="fixed_per_item">Fixed per item</option>
+                  <option value="percentage_of_sale">% of sale</option>
+                  <option value="percentage_of_profit">% of profit</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="custom-fee-value">Amount</label>
+                <input type="number" id="custom-fee-value" min="0" step="0.01" placeholder="0.00" />
+              </div>
+            </div>
+          </div>
+          <button id="add-fee-btn" class="btn-ghost">+ Add fee</button>
+          <div id="custom-fee-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Target -->
+    <div class="step-panel" id="step-panel-4">
+      <div class="step-header">
+        <p class="step-eyebrow" id="step-4-eyebrow">Step 4 of 4</p>
+        <h2 class="step-heading">What's your target?</h2>
+        <p class="step-sub">Calculate profit from a price, or find the price you need to charge.</p>
+      </div>
+
+      <div id="step-4-warning" class="step-warning"></div>
+
+      <div class="mode-toggle">
+        <button id="mode-calculate" class="mode-btn active">Calculate profit</button>
+        <button id="mode-solve" class="mode-btn">Find selling price</button>
+      </div>
+
+      <div class="field-group" id="calculate-group">
+        <label for="selling-price">Selling price (£)</label>
+        <input type="number" id="selling-price" min="0" step="0.01" placeholder="24.99" />
+      </div>
+
+      <div id="solve-group" style="display:none;">
+        <div class="field-group" style="margin-bottom:0.9rem;">
+          <label for="target-mode">Target type</label>
+          <select id="target-mode">
+            <option value="fixed">Fixed profit (£)</option>
+            <option value="margin">Net margin (%)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="target-profit" id="target-profit-label">Target net profit (£)</label>
+          <input type="number" id="target-profit" min="0" step="0.01" placeholder="5.00" />
+        </div>
+      </div>
+
+      <!-- Hidden fields for eBay computed cost -->
+      <input type="hidden" id="cost-price-ebay" />
+      <input type="hidden" id="shipping-cost-ebay" />
+    </div>
+
+  </div>
+
+  <!-- Bottom action bar -->
+  <div class="bottom-bar">
+    <button class="btn-back hidden" id="bar-back">&#8592;</button>
+    <div class="step-dots" id="step-dots"></div>
+    <button class="btn-primary" id="bar-next">Continue</button>
+  </div>
+
+</div>
+
+<!-- Result sheet -->
+<div class="sheet-backdrop" id="result-backdrop"></div>
+<div class="sheet" id="result-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span class="sheet-title">Result</span>
+    <button class="sheet-close" id="result-close">&#215;</button>
+  </div>
+  <div class="sheet-body" id="result-body">
+    <p class="error-message">No result yet.</p>
+  </div>
+</div>
+
+<!-- Summary (overview) sheet -->
+<div class="sheet-backdrop" id="summary-backdrop"></div>
+<div class="sheet" id="summary-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span class="sheet-title">Overview</span>
+    <button class="sheet-close" id="summary-close">&#215;</button>
+  </div>
+  <div class="sheet-body" id="summary-body"></div>
+</div>
+
+<!-- Workings modal -->
+<div class="modal-backdrop" id="workings-backdrop"></div>
+<div class="modal" id="workings-modal">
+  <div class="modal-handle"></div>
+  <div class="modal-header">
+    <span class="modal-title">Show workings</span>
+    <button class="modal-close" id="workings-close">&#215;</button>
+  </div>
+  <div class="modal-body" id="debug-content">
+    <p class="debug-empty">Run a calculation to see the workings.</p>
+  </div>
+</div>
+
+<script src="dist/app.js"></script>
+</body>
+</html>

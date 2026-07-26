@@ -1,0 +1,14 @@
+{
+  "name": "marketplace-calculator",
+  "version": "1.0.0",
+  "description": "Marketplace pricing calculator -- eBay, Amazon, B&Q and custom fees",
+  "scripts": {
+    "build": "npx esbuild src/ui/app.ts --bundle --outfile=dist/app.js --target=es2020",
+    "watch": "npx esbuild src/ui/app.ts --bundle --outfile=dist/app.js --target=es2020 --watch",
+    "typecheck": "npx tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}
