@@ -72,6 +72,16 @@ then run `node dist/server.js` in a second terminal whenever you want to pick up
 
 All monetary values are in pence, matching the internal convention used throughout the engine.
 
+### Authentication
+
+Set the `API_KEY` environment variable to require a bearer token on every request. If it's unset, the API is open (fine for local development, not for a public server). When it's set, requests need:
+
+```
+Authorization: Bearer <your key>
+```
+
+Missing or wrong keys get a `401`. Cross-origin browser requests are blocked unless the calling origin is listed in the comma-separated `ALLOWED_ORIGINS` environment variable; server-to-server calls (curl, another backend) aren't affected by this since CORS is a browser-only restriction.
+
 ### `GET /api/marketplaces`
 
 Returns every registered marketplace config.
@@ -86,6 +96,7 @@ Calculates the fee breakdown for a given selling price.
 
 ```bash
 curl -X POST localhost:3000/api/calculate \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "marketplaceId": "ebay-uk",
@@ -140,6 +151,87 @@ Both `/api/calculate` and `/api/solve` accept:
 | `excludedFees` | array | any of `referralFee`, `paymentFee`, `fulfilmentFee`, `vatOnFees`, `shippingCost` |
 
 Errors come back as `{ "error": "message" }` with an appropriate status code (`400` for a bad request, `404` for an unknown marketplace or route).
+
+### Example usage
+
+Find the selling price needed to clear £5 net profit on an eBay listing costing £8.50, with £3.50 shipping:
+
+```bash
+curl -X POST https://api.linxweb.co.uk/api/solve \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketplaceId": "ebay-uk",
+    "costPrice": 850,
+    "shippingCost": 350,
+    "fulfilmentModeId": "self",
+    "targetMode": "fixed",
+    "targetNetProfit": 500
+  }'
+```
+
+```json
+{
+  "requiredSellingPrice": 1970,
+  "breakdown": { "sellingPrice": 1970, "netProfit": 500, "netMargin": 25.38, "roi": 58.82, "...": "..." },
+  "converged": true
+}
+```
+
+The same call from JavaScript, `fetch` being the only thing doing any work:
+
+```javascript
+const res = await fetch('https://api.linxweb.co.uk/api/solve', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    marketplaceId: 'ebay-uk',
+    costPrice: 850,
+    shippingCost: 350,
+    fulfilmentModeId: 'self',
+    targetMode: 'fixed',
+    targetNetProfit: 500,
+  }),
+});
+
+const { requiredSellingPrice, breakdown } = await res.json();
+console.log(`Sell at £${(requiredSellingPrice / 100).toFixed(2)} for £${(breakdown.netProfit / 100).toFixed(2)} profit`);
+```
+
+And the same from a Laravel app, using the `Http` facade:
+
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken(config('services.margin_desk.api_key'))
+    ->post('https://api.linxweb.co.uk/api/solve', [
+        'marketplaceId' => 'ebay-uk',
+        'costPrice' => 850,
+        'shippingCost' => 350,
+        'fulfilmentModeId' => 'self',
+        'targetMode' => 'fixed',
+        'targetNetProfit' => 500,
+    ])
+    ->throw();
+
+$requiredSellingPrice = $response->json('requiredSellingPrice');
+$netProfit = $response->json('breakdown.netProfit');
+
+// Sell at £19.70 for £5.00 profit
+echo sprintf('Sell at £%.2f for £%.2f profit', $requiredSellingPrice / 100, $netProfit / 100);
+```
+
+`Http::withToken()` sets the `Authorization: Bearer` header for you. `->throw()` turns a `4xx`/`5xx` response into an `Illuminate\Http\Client\RequestException`, catch it if you want to handle a failed calculation gracefully rather than letting it bubble up. Keep the key itself out of the codebase, add `MARGIN_DESK_API_KEY` to `.env` and reference it from `config/services.php`:
+
+```php
+// config/services.php
+'margin_desk' => [
+    'api_key' => env('MARGIN_DESK_API_KEY'),
+],
+```
 
 ## Project structure
 
