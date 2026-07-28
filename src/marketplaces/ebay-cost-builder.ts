@@ -1,7 +1,7 @@
 import { roundPence } from '../utils/math';
-import type { EbayCostBuilderInputs, EbayCostBuilderResult, EbayCostFormulaLine } from '../types';
+import type { EbayCostBuilderInputs, EbayCostBuilderResult, FormulaLine } from '../types';
 
-export type { EbayCostBuilderInputs, EbayCostBuilderResult, EbayCostFormulaLine };
+export type { EbayCostBuilderInputs, EbayCostBuilderResult };
 
 /**
  * Calculate the true cost of an eBay listing from supplier pricing inputs.
@@ -42,7 +42,7 @@ export function buildEbayCost(inputs: EbayCostBuilderInputs): EbayCostBuilderRes
 
   const shippingCost = ppIncludedInPrice ? 0 : ppCost;
 
-  const formulas: EbayCostFormulaLine[] = [
+  const formulas: FormulaLine[] = [
     {
       label: 'Unit cost',
       formula: `(${costPerBatch} ÷ ${safeUom}) × ${qtyRequired} × (1 − ${discountRate})`,

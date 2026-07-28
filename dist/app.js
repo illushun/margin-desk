@@ -207,6 +207,21 @@
       }
       return { label: fee.label, formula, amount: fee.amount };
     });
+    const totalDeductions = totalFees + costPrice;
+    const referralFormula = referral.minimum > 0 && referral.fee === referral.minimum ? `${sellingPrice} \xD7 ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} \u2192 minimum applies` : `${sellingPrice} \xD7 ${referral.rate}`;
+    const paymentFormula = config.paymentFee.fixed > 0 ? `${sellingPrice} \xD7 ${config.paymentFee.percentage} + ${config.paymentFee.fixed}` : `${sellingPrice} \xD7 ${config.paymentFee.percentage}`;
+    const vatFormula = !config.vatOnFees ? "not applicable for this marketplace" : !vatRegistered ? "not applicable (not VAT registered)" : `${marketplaceFeeSubtotal} \xD7 ${vatRate}`;
+    const formulas = [
+      { label: "Referral fee", formula: referralFormula, amount: referral.fee, excluded: excludedFees.has("referralFee") },
+      { label: "Closing fee", formula: "fixed per item", amount: closingFee },
+      { label: "Payment processing fee", formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has("paymentFee") },
+      { label: "Fulfilment fee", formula: "weight/mode lookup", amount: rawFulfilmentFee, excluded: excludedFees.has("fulfilmentFee") },
+      { label: "Shipping cost", formula: "entered amount", amount: rawShippingCost, excluded: excludedFees.has("shippingCost") },
+      { label: "VAT on fees", formula: vatFormula, amount: rawVatOnFees, excluded: excludedFees.has("vatOnFees") },
+      ...customFeeTraces,
+      { label: "Total deductions", formula: "all fees + cost price", amount: totalDeductions },
+      { label: "Net profit", formula: `${sellingPrice} \u2212 ${totalDeductions}`, amount: netProfit }
+    ];
     const trace = {
       sellingPrice,
       referralRate: referral.rate,
@@ -228,8 +243,9 @@
       vatExcluded: excludedFees.has("vatOnFees"),
       customFees: customFeeTraces,
       costPrice,
-      totalDeductions: totalFees + costPrice,
-      netProfit
+      totalDeductions,
+      netProfit,
+      formulas
     };
     return { breakdown, trace };
   }
@@ -482,9 +498,6 @@
   }
 
   // src/ui/debug.ts
-  function pct(rate) {
-    return `${(rate * 100).toFixed(3).replace(/\.?0+$/, "")}%`;
-  }
   function gbp(pence) {
     return formatGBP(pence);
   }
@@ -529,59 +542,37 @@
     }
     return section("Cost Builder", rows);
   }
+  var FEE_TRACE_HIDE_IF_ZERO = /* @__PURE__ */ new Set([
+    "Closing fee",
+    "Payment processing fee",
+    "Fulfilment fee",
+    "Shipping cost",
+    "VAT on fees"
+  ]);
   function renderFeeTrace(t) {
     let rows = "";
-    if (t.referralMinimum > 0 && t.referralFee === t.referralMinimum) {
-      rows += row(
-        "Referral fee",
-        `${gbp(t.sellingPrice)} \xD7 ${pct(t.referralRate)} = ${gbp(Math.round(t.sellingPrice * t.referralRate))} \u2192 minimum applies`,
-        gbp(t.referralFee),
-        t.referralExcluded
-      );
-    } else {
-      rows += row(
-        "Referral fee",
-        `${gbp(t.sellingPrice)} \xD7 ${pct(t.referralRate)}`,
-        gbp(t.referralFee),
-        t.referralExcluded
-      );
+    for (const f of t.formulas) {
+      if (FEE_TRACE_HIDE_IF_ZERO.has(f.label) && f.amount === 0 && !f.excluded) continue;
+      if (f.label === "Total deductions") {
+        rows += `
+        <tr class="debug-total">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result">${gbp(f.amount)}</td>
+        </tr>
+      `;
+      } else if (f.label === "Net profit") {
+        rows += `
+        <tr class="debug-profit">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result ${f.amount >= 0 ? "positive" : "negative"}">${gbp(f.amount)}</td>
+        </tr>
+      `;
+      } else {
+        rows += row(f.label, f.formula, gbp(f.amount), f.excluded);
+      }
     }
-    if (t.closingFee > 0) {
-      rows += row("Closing fee", "fixed per item", gbp(t.closingFee));
-    }
-    if (t.paymentFee > 0 || t.paymentExcluded) {
-      const formula = t.paymentFixed > 0 ? `${gbp(t.sellingPrice)} \xD7 ${pct(t.paymentPercentage)} + ${gbp(t.paymentFixed)}` : `${gbp(t.sellingPrice)} \xD7 ${pct(t.paymentPercentage)}`;
-      rows += row("Payment processing fee", formula, gbp(t.paymentFee), t.paymentExcluded);
-    }
-    if (t.fulfilmentFee > 0 || t.fulfilmentExcluded) {
-      rows += row("Fulfilment fee", "weight/mode lookup", gbp(t.fulfilmentFee), t.fulfilmentExcluded);
-    }
-    if (t.shippingCost > 0 || t.shippingExcluded) {
-      rows += row("Shipping cost", "entered amount", gbp(t.shippingCost), t.shippingExcluded);
-    }
-    if (t.vatOnFees > 0 || t.vatExcluded) {
-      rows += row(
-        "VAT on fees",
-        `${gbp(t.marketplaceFeeSubtotal)} \xD7 ${pct(t.vatRate)}`,
-        gbp(t.vatOnFees),
-        t.vatExcluded
-      );
-    }
-    for (const fee of t.customFees) {
-      rows += row(fee.label, fee.formula, gbp(fee.amount));
-    }
-    rows += `
-    <tr class="debug-total">
-      <td class="debug-label">Total deductions</td>
-      <td class="debug-formula">all fees + cost price</td>
-      <td class="debug-result">${gbp(t.totalDeductions)}</td>
-    </tr>
-    <tr class="debug-profit">
-      <td class="debug-label">Net profit</td>
-      <td class="debug-formula">${gbp(t.sellingPrice)} \u2212 ${gbp(t.totalDeductions)}</td>
-      <td class="debug-result ${t.netProfit >= 0 ? "positive" : "negative"}">${gbp(t.netProfit)}</td>
-    </tr>
-  `;
     return section("Fee Calculation", rows);
   }
   function renderSolverTrace(t) {

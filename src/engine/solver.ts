@@ -1,4 +1,4 @@
-import type { MarketplaceConfig, SolverOptions, SolverResult, SolverTrace, SolverFormulaLine, FeeTrace } from '../types';
+import type { MarketplaceConfig, SolverOptions, SolverResult, SolverTrace, FormulaLine, FeeTrace } from '../types';
 import { calculateFees, calculateFeesWithTrace } from './fees';
 import { roundPence } from '../utils/math';
 
@@ -79,7 +79,7 @@ function buildFormulaLines(
   algebraicEstimate: number,
   estimateFormula: string,
   finalPrice: number,
-): SolverFormulaLine[] {
+): FormulaLine[] {
   const targetProfitFormula = options.targetMode === 'margin'
     ? `${finalPrice} × ${options.targetMargin}`
     : 'fixed target amount';

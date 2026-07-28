@@ -5,6 +5,7 @@ import type {
   FeeTrace,
   CustomFeeResult,
   WeightBand,
+  FormulaLine,
 } from '../types';
 import { roundPence, round2dp, safeDivide } from '../utils/math';
 import { calcVatOnFees } from './vat';
@@ -175,6 +176,34 @@ export function calculateFeesWithTrace(
     return { label: fee.label, formula, amount: fee.amount };
   });
 
+  const totalDeductions = totalFees + costPrice;
+
+  const referralFormula = referral.minimum > 0 && referral.fee === referral.minimum
+    ? `${sellingPrice} × ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} → minimum applies`
+    : `${sellingPrice} × ${referral.rate}`;
+
+  const paymentFormula = config.paymentFee.fixed > 0
+    ? `${sellingPrice} × ${config.paymentFee.percentage} + ${config.paymentFee.fixed}`
+    : `${sellingPrice} × ${config.paymentFee.percentage}`;
+
+  const vatFormula = !config.vatOnFees
+    ? 'not applicable for this marketplace'
+    : !vatRegistered
+      ? 'not applicable (not VAT registered)'
+      : `${marketplaceFeeSubtotal} × ${vatRate}`;
+
+  const formulas: FormulaLine[] = [
+    { label: 'Referral fee', formula: referralFormula, amount: referral.fee, excluded: excludedFees.has('referralFee') },
+    { label: 'Closing fee', formula: 'fixed per item', amount: closingFee },
+    { label: 'Payment processing fee', formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has('paymentFee') },
+    { label: 'Fulfilment fee', formula: 'weight/mode lookup', amount: rawFulfilmentFee, excluded: excludedFees.has('fulfilmentFee') },
+    { label: 'Shipping cost', formula: 'entered amount', amount: rawShippingCost, excluded: excludedFees.has('shippingCost') },
+    { label: 'VAT on fees', formula: vatFormula, amount: rawVatOnFees, excluded: excludedFees.has('vatOnFees') },
+    ...customFeeTraces,
+    { label: 'Total deductions', formula: 'all fees + cost price', amount: totalDeductions },
+    { label: 'Net profit', formula: `${sellingPrice} − ${totalDeductions}`, amount: netProfit },
+  ];
+
   const trace: FeeTrace = {
     sellingPrice,
     referralRate: referral.rate,
@@ -196,8 +225,9 @@ export function calculateFeesWithTrace(
     vatExcluded: excludedFees.has('vatOnFees'),
     customFees: customFeeTraces,
     costPrice,
-    totalDeductions: totalFees + costPrice,
+    totalDeductions,
     netProfit,
+    formulas,
   };
 
   return { breakdown, trace };

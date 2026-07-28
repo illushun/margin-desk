@@ -5,10 +5,6 @@ import { formatGBP } from '../utils/currency';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function pct(rate: number): string {
-  return `${(rate * 100).toFixed(3).replace(/\.?0+$/, '')}%`;
-}
-
 function gbp(pence: number): string {
   return formatGBP(pence);
 }
@@ -67,70 +63,40 @@ function renderEbayCostTrace(t: EbayCostBuilderResult): string {
   return section('Cost Builder', rows);
 }
 
+const FEE_TRACE_HIDE_IF_ZERO = new Set([
+  'Closing fee',
+  'Payment processing fee',
+  'Fulfilment fee',
+  'Shipping cost',
+  'VAT on fees',
+]);
+
 function renderFeeTrace(t: FeeTrace): string {
   let rows = '';
 
-  // Referral fee
-  if (t.referralMinimum > 0 && t.referralFee === t.referralMinimum) {
-    rows += row(
-      'Referral fee',
-      `${gbp(t.sellingPrice)} × ${pct(t.referralRate)} = ${gbp(Math.round(t.sellingPrice * t.referralRate))} → minimum applies`,
-      gbp(t.referralFee),
-      t.referralExcluded,
-    );
-  } else {
-    rows += row(
-      'Referral fee',
-      `${gbp(t.sellingPrice)} × ${pct(t.referralRate)}`,
-      gbp(t.referralFee),
-      t.referralExcluded,
-    );
-  }
+  for (const f of t.formulas) {
+    if (FEE_TRACE_HIDE_IF_ZERO.has(f.label) && f.amount === 0 && !f.excluded) continue;
 
-  if (t.closingFee > 0) {
-    rows += row('Closing fee', 'fixed per item', gbp(t.closingFee));
+    if (f.label === 'Total deductions') {
+      rows += `
+        <tr class="debug-total">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result">${gbp(f.amount)}</td>
+        </tr>
+      `;
+    } else if (f.label === 'Net profit') {
+      rows += `
+        <tr class="debug-profit">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result ${f.amount >= 0 ? 'positive' : 'negative'}">${gbp(f.amount)}</td>
+        </tr>
+      `;
+    } else {
+      rows += row(f.label, f.formula, gbp(f.amount), f.excluded);
+    }
   }
-
-  if (t.paymentFee > 0 || t.paymentExcluded) {
-    const formula = t.paymentFixed > 0
-      ? `${gbp(t.sellingPrice)} × ${pct(t.paymentPercentage)} + ${gbp(t.paymentFixed)}`
-      : `${gbp(t.sellingPrice)} × ${pct(t.paymentPercentage)}`;
-    rows += row('Payment processing fee', formula, gbp(t.paymentFee), t.paymentExcluded);
-  }
-
-  if (t.fulfilmentFee > 0 || t.fulfilmentExcluded) {
-    rows += row('Fulfilment fee', 'weight/mode lookup', gbp(t.fulfilmentFee), t.fulfilmentExcluded);
-  }
-
-  if (t.shippingCost > 0 || t.shippingExcluded) {
-    rows += row('Shipping cost', 'entered amount', gbp(t.shippingCost), t.shippingExcluded);
-  }
-
-  if (t.vatOnFees > 0 || t.vatExcluded) {
-    rows += row(
-      'VAT on fees',
-      `${gbp(t.marketplaceFeeSubtotal)} × ${pct(t.vatRate)}`,
-      gbp(t.vatOnFees),
-      t.vatExcluded,
-    );
-  }
-
-  for (const fee of t.customFees) {
-    rows += row(fee.label, fee.formula, gbp(fee.amount));
-  }
-
-  rows += `
-    <tr class="debug-total">
-      <td class="debug-label">Total deductions</td>
-      <td class="debug-formula">all fees + cost price</td>
-      <td class="debug-result">${gbp(t.totalDeductions)}</td>
-    </tr>
-    <tr class="debug-profit">
-      <td class="debug-label">Net profit</td>
-      <td class="debug-formula">${gbp(t.sellingPrice)} − ${gbp(t.totalDeductions)}</td>
-      <td class="debug-result ${t.netProfit >= 0 ? 'positive' : 'negative'}">${gbp(t.netProfit)}</td>
-    </tr>
-  `;
 
   return section('Fee Calculation', rows);
 }

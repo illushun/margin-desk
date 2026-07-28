@@ -168,7 +168,22 @@ curl -X POST localhost:3000/api/calculate \
 }
 ```
 
-Add `?trace=true` to the URL to include the full fee trace (individual formulae) alongside the breakdown.
+Add `?trace=true` to the URL to include a `trace` object alongside `breakdown`, with every raw fee component plus a `trace.formulas` array covering the whole calculation line by line, same shape as the eBay cost builder and solver:
+
+```json
+"formulas": [
+  { "label": "Referral fee", "formula": "2499 × 0.119", "amount": 297, "excluded": false },
+  { "label": "Closing fee", "formula": "fixed per item", "amount": 0 },
+  { "label": "Payment processing fee", "formula": "2499 × 0.003 + 30", "amount": 37, "excluded": false },
+  { "label": "Fulfilment fee", "formula": "weight/mode lookup", "amount": 0, "excluded": false },
+  { "label": "Shipping cost", "formula": "entered amount", "amount": 350, "excluded": false },
+  { "label": "VAT on fees", "formula": "not applicable (not VAT registered)", "amount": 0, "excluded": false },
+  { "label": "Total deductions", "formula": "all fees + cost price", "amount": 1534 },
+  { "label": "Net profit", "formula": "2499 − 1534", "amount": 965 }
+]
+```
+
+Any custom fees from the request appear as additional lines between `VAT on fees` and `Total deductions`. This is the exact same data the app's own "show workings" panel renders from, so a caller can reproduce that panel without reimplementing any of the fee maths. `excluded` is only present on lines that respect `excludedFees`; when true, the amount was zeroed out of the calculation but still shown for context.
 
 ### `POST /api/solve`
 

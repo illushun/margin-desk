@@ -130,6 +130,15 @@ export interface SolverResult {
 // Debug trace
 // ---------------------------------------------------------------------------
 
+/** One line of "show your working": a label, a human-readable formula with the
+ * actual inputs substituted in (pence, not pounds), and the resulting amount. */
+export interface FormulaLine {
+  label: string;
+  formula: string;
+  amount: number;      // pence
+  excluded?: boolean;  // true if this line was zeroed out by CalculationOptions.excludedFees
+}
+
 export interface EbayCostBuilderInputs {
   costPerBatch: number;       // supplier price in pence (for the whole UoM batch)
   uom: number;                // units per batch e.g. 12 if supplier sells packs of 12
@@ -143,17 +152,11 @@ export interface EbayCostBuilderInputs {
   adCost: number;             // promoted listings fixed cost in pence
 }
 
-export interface EbayCostFormulaLine {
-  label: string;
-  formula: string;   // human-readable, with the actual inputs substituted in (pence, not pounds)
-  amount: number;     // pence
-}
-
 export interface EbayCostBuilderResult {
   costPrice: number;          // feeds into CalculationOptions.costPrice
   shippingCost: number;       // feeds into CalculationOptions.shippingCost
   unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
-  formulas: EbayCostFormulaLine[]; // line-by-line working, so callers can show it without reimplementing the maths
+  formulas: FormulaLine[]; // line-by-line working, so callers can show it without reimplementing the maths
 }
 
 export interface FeeTrace {
@@ -179,6 +182,7 @@ export interface FeeTrace {
   costPrice: number;
   totalDeductions: number;
   netProfit: number;
+  formulas: FormulaLine[]; // line-by-line working through every fee, same shape as the eBay cost builder and solver
 }
 
 export interface SolverIteration {
@@ -189,12 +193,6 @@ export interface SolverIteration {
   error: number;
 }
 
-export interface SolverFormulaLine {
-  label: string;
-  formula: string;   // human-readable, with the actual inputs substituted in
-  amount: number;     // pence
-}
-
 export interface SolverTrace {
   targetMode: SolverTargetMode;
   targetNetProfit: number;
@@ -203,7 +201,7 @@ export interface SolverTrace {
   iterations: SolverIteration[];
   converged: boolean;
   finalPrice: number;
-  formulas: SolverFormulaLine[]; // how the algebraic estimate and target profit were derived
+  formulas: FormulaLine[]; // how the algebraic estimate and target profit were derived
 }
 
 export interface DebugTrace {
