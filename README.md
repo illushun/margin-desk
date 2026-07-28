@@ -220,11 +220,20 @@ That's a £12 pack of 12 units, one unit needed per listing, a 10% supplier disc
 {
   "costPrice": 120,
   "shippingCost": 350,
-  "unitCost": 90
+  "unitCost": 90,
+  "formulas": [
+    { "label": "Unit cost", "formula": "(1200 ÷ 12) × 1 × (1 − 0.1)", "amount": 90 },
+    { "label": "Packing materials", "formula": "fixed per item", "amount": 30 },
+    { "label": "P+P (charged as shipping)", "formula": "excluded from cost price, returned as shippingCost instead", "amount": 350 },
+    { "label": "VAT on selling price", "formula": "entered amount", "amount": 0 },
+    { "label": "Listing fee", "formula": "fixed per listing", "amount": 0 },
+    { "label": "Ad / promoted listings cost", "formula": "fixed amount", "amount": 0 },
+    { "label": "Cost price", "formula": "90 + 30 + 0 + 0 + 0 + 0", "amount": 120 }
+  ]
 }
 ```
 
-`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
+`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`. `formulas` is a line-by-line breakdown of how `costPrice` was built, all amounts in pence, so callers can render a "show your working" view without reimplementing the cost builder's maths themselves. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
 
 ### Shared request fields
 

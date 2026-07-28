@@ -13,10 +13,17 @@ export interface EbayCostBuilderInputs {
   adCost: number;             // promoted listings fixed cost in pence
 }
 
+export interface EbayCostFormulaLine {
+  label: string;
+  formula: string;   // human-readable, with the actual inputs substituted in (pence, not pounds)
+  amount: number;     // pence
+}
+
 export interface EbayCostBuilderResult {
   costPrice: number;          // feeds into CalculationOptions.costPrice
   shippingCost: number;       // feeds into CalculationOptions.shippingCost
   unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
+  formulas: EbayCostFormulaLine[]; // line-by-line working, so API callers can show it without reimplementing the maths
 }
 
 /**
@@ -58,5 +65,45 @@ export function buildEbayCost(inputs: EbayCostBuilderInputs): EbayCostBuilderRes
 
   const shippingCost = ppIncludedInPrice ? 0 : ppCost;
 
-  return { costPrice, shippingCost, unitCost };
+  const formulas: EbayCostFormulaLine[] = [
+    {
+      label: 'Unit cost',
+      formula: `(${costPerBatch} ÷ ${safeUom}) × ${qtyRequired} × (1 − ${discountRate})`,
+      amount: unitCost,
+    },
+    {
+      label: 'Packing materials',
+      formula: 'fixed per item',
+      amount: packingMaterials,
+    },
+    {
+      label: ppIncludedInPrice ? 'P+P (included in cost price)' : 'P+P (charged as shipping)',
+      formula: ppIncludedInPrice
+        ? 'added to cost price'
+        : 'excluded from cost price, returned as shippingCost instead',
+      amount: ppCost,
+    },
+    {
+      label: 'VAT on selling price',
+      formula: 'entered amount',
+      amount: vatOnSellingPrice,
+    },
+    {
+      label: 'Listing fee',
+      formula: 'fixed per listing',
+      amount: listingFee,
+    },
+    {
+      label: 'Ad / promoted listings cost',
+      formula: 'fixed amount',
+      amount: adCost,
+    },
+    {
+      label: 'Cost price',
+      formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
+      amount: costPrice,
+    },
+  ];
+
+  return { costPrice, shippingCost, unitCost, formulas };
 }

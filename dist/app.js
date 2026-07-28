@@ -653,7 +653,44 @@
       unitCost + packingMaterials + (ppIncludedInPrice ? ppCost : 0) + vatOnSellingPrice + listingFee + adCost
     );
     const shippingCost = ppIncludedInPrice ? 0 : ppCost;
-    return { costPrice, shippingCost, unitCost };
+    const formulas = [
+      {
+        label: "Unit cost",
+        formula: `(${costPerBatch} \xF7 ${safeUom}) \xD7 ${qtyRequired} \xD7 (1 \u2212 ${discountRate})`,
+        amount: unitCost
+      },
+      {
+        label: "Packing materials",
+        formula: "fixed per item",
+        amount: packingMaterials
+      },
+      {
+        label: ppIncludedInPrice ? "P+P (included in cost price)" : "P+P (charged as shipping)",
+        formula: ppIncludedInPrice ? "added to cost price" : "excluded from cost price, returned as shippingCost instead",
+        amount: ppCost
+      },
+      {
+        label: "VAT on selling price",
+        formula: "entered amount",
+        amount: vatOnSellingPrice
+      },
+      {
+        label: "Listing fee",
+        formula: "fixed per listing",
+        amount: listingFee
+      },
+      {
+        label: "Ad / promoted listings cost",
+        formula: "fixed amount",
+        amount: adCost
+      },
+      {
+        label: "Cost price",
+        formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
+        amount: costPrice
+      }
+    ];
+    return { costPrice, shippingCost, unitCost, formulas };
   }
 
   // src/ui/icons.ts
