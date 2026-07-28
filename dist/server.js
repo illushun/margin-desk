@@ -257,6 +257,7 @@ function calculateFeesWithTrace(config, options) {
 // src/engine/solver.ts
 var MAX_ITERATIONS = 100;
 var CONVERGENCE_THRESHOLD = 1;
+var MAX_RATCHET_STEPS = 20;
 function estimateSellingPrice(config, options) {
   const { costPrice, shippingCost, excludedFees } = options;
   const referralRate = excludedFees.has("referralFee") ? 0 : config.referralFees[0]?.rate ?? 0;
@@ -288,7 +289,16 @@ function estimateSellingPrice(config, options) {
 }
 function resolveTargetProfit(options, currentPrice) {
   if (options.targetMode === "fixed") return options.targetNetProfit;
-  return roundPence(currentPrice * options.targetMargin);
+  return Math.ceil(currentPrice * options.targetMargin);
+}
+function ratchetToTarget(config, options, startPrice) {
+  let finalPrice = startPrice;
+  let { breakdown, trace: feeTrace } = calculateFeesWithTrace(config, { ...options, sellingPrice: finalPrice });
+  for (let i = 0; i < MAX_RATCHET_STEPS && breakdown.netProfit < resolveTargetProfit(options, finalPrice); i++) {
+    finalPrice += 1;
+    ({ breakdown, trace: feeTrace } = calculateFeesWithTrace(config, { ...options, sellingPrice: finalPrice }));
+  }
+  return { finalPrice, breakdown, feeTrace };
 }
 function buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice) {
   const targetProfitFormula = options.targetMode === "margin" ? `${finalPrice} \xD7 ${options.targetMargin}` : "fixed target amount";
@@ -315,8 +325,7 @@ function solveForPrice(config, options) {
     });
     if (Math.abs(error) <= CONVERGENCE_THRESHOLD) {
       converged = true;
-      const finalPrice = breakdown2.netProfit < targetProfit ? price + 1 : price;
-      const { breakdown: finalBreakdown, trace: feeTrace2 } = calculateFeesWithTrace(config, { ...options, sellingPrice: finalPrice });
+      const { finalPrice, breakdown: finalBreakdown, feeTrace: feeTrace2 } = ratchetToTarget(config, options, price);
       const trace2 = {
         targetMode: options.targetMode,
         targetNetProfit: options.targetNetProfit,
