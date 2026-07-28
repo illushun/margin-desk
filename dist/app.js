@@ -508,42 +508,24 @@
     </div>
   `;
   }
+  var EBAY_COST_HIDE_IF_ZERO = /* @__PURE__ */ new Set([
+    "Packing materials",
+    "VAT on selling price",
+    "Listing fee",
+    "Ad / promoted listings cost"
+  ]);
+  var EBAY_COST_TOTAL_LABELS = /* @__PURE__ */ new Set(["Cost price", "Shipping cost"]);
   function renderEbayCostTrace(t) {
-    const discPct = pct(t.discountRate);
-    const unitFormula = t.discountRate > 0 ? `(${gbp(t.costPerBatch)} \xF7 ${t.uom}) \xD7 ${t.qtyRequired} \xD7 (1 \u2212 ${discPct})` : `(${gbp(t.costPerBatch)} \xF7 ${t.uom}) \xD7 ${t.qtyRequired}`;
-    let rows = row("Unit cost", unitFormula, gbp(t.unitCost));
-    if (t.packingMaterials > 0) {
-      rows += row("Packing materials", "fixed per item", gbp(t.packingMaterials));
-    }
-    if (t.ppIncludedInPrice) {
-      rows += row("P+P (in price)", "included in cost price", gbp(t.ppCost));
-    } else {
-      rows += row("P+P (separate)", "charged as shipping", gbp(t.ppCost));
-    }
-    if (t.vatOnSellingPrice > 0) {
-      rows += row("VAT on selling price", "entered amount", gbp(t.vatOnSellingPrice));
-    }
-    if (t.listingFee > 0) {
-      rows += row("Listing fee", "fixed per listing", gbp(t.listingFee));
-    }
-    if (t.adCost > 0) {
-      rows += row("Ad / promoted listings", "fixed amount", gbp(t.adCost));
-    }
-    rows += `
-    <tr class="debug-total">
-      <td class="debug-label">Cost price</td>
-      <td class="debug-formula">${gbp(t.unitCost)} + overheads</td>
-      <td class="debug-result">${gbp(t.costPrice)}</td>
-    </tr>
-  `;
-    if (!t.ppIncludedInPrice && t.ppCost > 0) {
-      rows += `
-      <tr class="debug-total">
-        <td class="debug-label">Shipping cost</td>
-        <td class="debug-formula">P+P passed through</td>
-        <td class="debug-result">${gbp(t.shippingCost)}</td>
-      </tr>
-    `;
+    let rows = "";
+    for (const f of t.formulas) {
+      if (EBAY_COST_HIDE_IF_ZERO.has(f.label) && f.amount === 0) continue;
+      rows += EBAY_COST_TOTAL_LABELS.has(f.label) ? `
+        <tr class="debug-total">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result">${gbp(f.amount)}</td>
+        </tr>
+      ` : row(f.label, f.formula, gbp(f.amount));
     }
     return section("Cost Builder", rows);
   }
@@ -604,16 +586,18 @@
   }
   function renderSolverTrace(t) {
     const targetLabel = t.targetMode === "margin" ? `${(t.targetMargin * 100).toFixed(1)}% net margin` : `${gbp(t.targetNetProfit)} net profit`;
+    const estimateFormula = t.formulas.find((f) => f.label === "Algebraic starting estimate");
+    const targetProfitFormula = t.formulas.find((f) => f.label === "Target profit");
     let rows = `
     <tr>
       <td class="debug-label">Target</td>
-      <td class="debug-formula" colspan="3">${targetLabel}</td>
+      <td class="debug-formula" colspan="2">${targetLabel}</td>
+      <td class="debug-result">${targetProfitFormula ? gbp(targetProfitFormula.amount) : ""}</td>
     </tr>
     <tr>
       <td class="debug-label">Algebraic estimate</td>
-      <td class="debug-formula" colspan="3">
-        constants \xF7 (1 \u2212 percentage rates) = ${gbp(t.algebraicEstimate)}
-      </td>
+      <td class="debug-formula" colspan="2">${estimateFormula?.formula ?? ""}</td>
+      <td class="debug-result">${gbp(t.algebraicEstimate)}</td>
     </tr>
     <tr class="debug-iter-header">
       <td>Iteration</td>
@@ -707,6 +691,11 @@
         label: "Cost price",
         formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
         amount: costPrice
+      },
+      {
+        label: "Shipping cost",
+        formula: ppIncludedInPrice ? "0 (P+P included in cost price)" : `${ppCost} (P+P charged separately)`,
+        amount: shippingCost
       }
     ];
     return { costPrice, shippingCost, unitCost, formulas };
@@ -725,6 +714,7 @@
   var customFeeCounter = 0;
   var currentStep = 1;
   var visitedSteps = /* @__PURE__ */ new Set([1]);
+  var lastEbayCostResult;
   var el = (id) => document.getElementById(id);
   function getSteps() {
     const isEbay = el("marketplace").value === "ebay-uk";
@@ -840,37 +830,7 @@
     const excl = el("exclude-shippingCost");
     excl.checked = ppIncluded || excl.checked;
     excl.disabled = ppIncluded;
-  }
-  function buildEbayCostTrace() {
-    if (el("marketplace").value !== "ebay-uk") return void 0;
-    const ppIncluded = el("ebay-pp-included").checked;
-    const costPerBatch = poundsToPence(el("ebay-cost-per-batch").value);
-    const uom = parseFloat(el("ebay-uom").value) || 1;
-    const qty = parseFloat(el("ebay-qty-required").value) || 1;
-    const disc = percentageToRate(el("ebay-discount").value);
-    const packing = poundsToPence(el("ebay-packing-materials").value);
-    const ppCost = poundsToPence(el("ebay-pp-cost").value);
-    const vatAmt = poundsToPence(el("ebay-vat-amount").value);
-    const listingFee = poundsToPence(el("ebay-listing-fee").value);
-    const adCost = poundsToPence(el("ebay-ad-cost").value);
-    const safeUom = uom <= 0 ? 1 : uom;
-    const unitCost = Math.round(costPerBatch / safeUom * qty * (1 - disc));
-    const costPrice = unitCost + packing + (ppIncluded ? ppCost : 0) + vatAmt + listingFee + adCost;
-    return {
-      costPerBatch,
-      uom,
-      qtyRequired: qty,
-      discountRate: disc,
-      unitCost,
-      packingMaterials: packing,
-      ppCost,
-      ppIncludedInPrice: ppIncluded,
-      vatOnSellingPrice: vatAmt,
-      listingFee,
-      adCost,
-      costPrice,
-      shippingCost: ppIncluded ? 0 : ppCost
-    };
+    return result;
   }
   function renderCustomFeeList() {
     const list = el("custom-fee-list");
@@ -930,7 +890,7 @@
   }
   function buildBaseOptions() {
     const isEbay = el("marketplace").value === "ebay-uk";
-    if (isEbay) applyEbayCostBuilder();
+    lastEbayCostResult = isEbay ? applyEbayCostBuilder() : void 0;
     const costPrice = isEbay ? parseInt(el("cost-price-ebay").value || "0") : poundsToPence(el("cost-price").value);
     const shippingCost = isEbay ? parseInt(el("shipping-cost-ebay").value || "0") : poundsToPence(el("shipping-cost").value);
     const weightRaw = parseFloat(el("weight-grams").value);
@@ -982,8 +942,7 @@
       };
       const result = solveForPrice(config, solverOpts);
       renderSolverResult(resultBody, result);
-      const ebayCostTrace = buildEbayCostTrace();
-      const debugTrace = ebayCostTrace ? { fees: result.trace.feeTrace, solver: result.trace, ebayCost: ebayCostTrace } : { fees: result.trace.feeTrace, solver: result.trace };
+      const debugTrace = lastEbayCostResult ? { fees: result.trace.feeTrace, solver: result.trace, ebayCost: lastEbayCostResult } : { fees: result.trace.feeTrace, solver: result.trace };
       renderDebugTrace(debugContainer, debugTrace);
     } else {
       const sellingPrice = poundsToPence(el("selling-price").value);
@@ -995,8 +954,7 @@
       el("step-4-warning").style.display = "none";
       const { breakdown, trace: feeTrace } = calculateFeesWithTrace(config, { ...buildBaseOptions(), sellingPrice });
       renderBreakdown(resultBody, breakdown);
-      const ebayCostTrace = buildEbayCostTrace();
-      const debugTrace = ebayCostTrace ? { fees: feeTrace, ebayCost: ebayCostTrace } : { fees: feeTrace };
+      const debugTrace = lastEbayCostResult ? { fees: feeTrace, ebayCost: lastEbayCostResult } : { fees: feeTrace };
       renderDebugTrace(debugContainer, debugTrace);
     }
     openResultSheet();

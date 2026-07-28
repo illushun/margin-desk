@@ -130,20 +130,30 @@ export interface SolverResult {
 // Debug trace
 // ---------------------------------------------------------------------------
 
-export interface EbayCostTrace {
-  costPerBatch: number;
-  uom: number;
-  qtyRequired: number;
-  discountRate: number;
-  unitCost: number;
-  packingMaterials: number;
-  ppCost: number;
-  ppIncludedInPrice: boolean;
-  vatOnSellingPrice: number;
-  listingFee: number;
-  adCost: number;
-  costPrice: number;
-  shippingCost: number;
+export interface EbayCostBuilderInputs {
+  costPerBatch: number;       // supplier price in pence (for the whole UoM batch)
+  uom: number;                // units per batch e.g. 12 if supplier sells packs of 12
+  qtyRequired: number;        // units needed per eBay listing
+  discountRate: number;       // supplier discount as a decimal e.g. 0.10 for 10%
+  packingMaterials: number;   // pence per item
+  ppCost: number;             // actual postage + packing cost in pence
+  ppIncludedInPrice: boolean; // true = bundle P+P into item price, false = charge separately
+  vatOnSellingPrice: number;  // VAT amount in pence the seller expects to remit on this item
+  listingFee: number;         // eBay fixed listing fee in pence
+  adCost: number;             // promoted listings fixed cost in pence
+}
+
+export interface EbayCostFormulaLine {
+  label: string;
+  formula: string;   // human-readable, with the actual inputs substituted in (pence, not pounds)
+  amount: number;     // pence
+}
+
+export interface EbayCostBuilderResult {
+  costPrice: number;          // feeds into CalculationOptions.costPrice
+  shippingCost: number;       // feeds into CalculationOptions.shippingCost
+  unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
+  formulas: EbayCostFormulaLine[]; // line-by-line working, so callers can show it without reimplementing the maths
 }
 
 export interface FeeTrace {
@@ -197,7 +207,7 @@ export interface SolverTrace {
 }
 
 export interface DebugTrace {
-  ebayCost?: EbayCostTrace;   // only present when eBay cost builder was used
+  ebayCost?: EbayCostBuilderResult;   // only present when eBay cost builder was used
   fees: FeeTrace;
   solver?: SolverTrace;       // only present in solve mode
 }

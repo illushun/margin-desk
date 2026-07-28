@@ -1,4 +1,4 @@
-import type { DebugTrace, EbayCostTrace, FeeTrace, SolverTrace } from '../types';
+import type { DebugTrace, EbayCostBuilderResult, FeeTrace, SolverTrace } from '../types';
 import { formatGBP } from '../utils/currency';
 
 // ---------------------------------------------------------------------------
@@ -39,52 +39,29 @@ function section(title: string, rows: string): string {
 // Section renderers
 // ---------------------------------------------------------------------------
 
-function renderEbayCostTrace(t: EbayCostTrace): string {
-  const discPct = pct(t.discountRate);
-  const unitFormula = t.discountRate > 0
-    ? `(${gbp(t.costPerBatch)} ÷ ${t.uom}) × ${t.qtyRequired} × (1 − ${discPct})`
-    : `(${gbp(t.costPerBatch)} ÷ ${t.uom}) × ${t.qtyRequired}`;
+const EBAY_COST_HIDE_IF_ZERO = new Set([
+  'Packing materials',
+  'VAT on selling price',
+  'Listing fee',
+  'Ad / promoted listings cost',
+]);
+const EBAY_COST_TOTAL_LABELS = new Set(['Cost price', 'Shipping cost']);
 
-  let rows = row('Unit cost', unitFormula, gbp(t.unitCost));
+function renderEbayCostTrace(t: EbayCostBuilderResult): string {
+  let rows = '';
 
-  if (t.packingMaterials > 0) {
-    rows += row('Packing materials', 'fixed per item', gbp(t.packingMaterials));
-  }
+  for (const f of t.formulas) {
+    if (EBAY_COST_HIDE_IF_ZERO.has(f.label) && f.amount === 0) continue;
 
-  if (t.ppIncludedInPrice) {
-    rows += row('P+P (in price)', 'included in cost price', gbp(t.ppCost));
-  } else {
-    rows += row('P+P (separate)', 'charged as shipping', gbp(t.ppCost));
-  }
-
-  if (t.vatOnSellingPrice > 0) {
-    rows += row('VAT on selling price', 'entered amount', gbp(t.vatOnSellingPrice));
-  }
-
-  if (t.listingFee > 0) {
-    rows += row('Listing fee', 'fixed per listing', gbp(t.listingFee));
-  }
-
-  if (t.adCost > 0) {
-    rows += row('Ad / promoted listings', 'fixed amount', gbp(t.adCost));
-  }
-
-  rows += `
-    <tr class="debug-total">
-      <td class="debug-label">Cost price</td>
-      <td class="debug-formula">${gbp(t.unitCost)} + overheads</td>
-      <td class="debug-result">${gbp(t.costPrice)}</td>
-    </tr>
-  `;
-
-  if (!t.ppIncludedInPrice && t.ppCost > 0) {
-    rows += `
-      <tr class="debug-total">
-        <td class="debug-label">Shipping cost</td>
-        <td class="debug-formula">P+P passed through</td>
-        <td class="debug-result">${gbp(t.shippingCost)}</td>
-      </tr>
-    `;
+    rows += EBAY_COST_TOTAL_LABELS.has(f.label)
+      ? `
+        <tr class="debug-total">
+          <td class="debug-label">${f.label}</td>
+          <td class="debug-formula">${f.formula}</td>
+          <td class="debug-result">${gbp(f.amount)}</td>
+        </tr>
+      `
+      : row(f.label, f.formula, gbp(f.amount));
   }
 
   return section('Cost Builder', rows);
@@ -163,16 +140,19 @@ function renderSolverTrace(t: SolverTrace): string {
     ? `${(t.targetMargin * 100).toFixed(1)}% net margin`
     : `${gbp(t.targetNetProfit)} net profit`;
 
+  const estimateFormula = t.formulas.find((f) => f.label === 'Algebraic starting estimate');
+  const targetProfitFormula = t.formulas.find((f) => f.label === 'Target profit');
+
   let rows = `
     <tr>
       <td class="debug-label">Target</td>
-      <td class="debug-formula" colspan="3">${targetLabel}</td>
+      <td class="debug-formula" colspan="2">${targetLabel}</td>
+      <td class="debug-result">${targetProfitFormula ? gbp(targetProfitFormula.amount) : ''}</td>
     </tr>
     <tr>
       <td class="debug-label">Algebraic estimate</td>
-      <td class="debug-formula" colspan="3">
-        constants ÷ (1 − percentage rates) = ${gbp(t.algebraicEstimate)}
-      </td>
+      <td class="debug-formula" colspan="2">${estimateFormula?.formula ?? ''}</td>
+      <td class="debug-result">${gbp(t.algebraicEstimate)}</td>
     </tr>
     <tr class="debug-iter-header">
       <td>Iteration</td>

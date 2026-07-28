@@ -386,6 +386,11 @@ function buildEbayCost(inputs) {
       label: "Cost price",
       formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
       amount: costPrice
+    },
+    {
+      label: "Shipping cost",
+      formula: ppIncludedInPrice ? "0 (P+P included in cost price)" : `${ppCost} (P+P charged separately)`,
+      amount: shippingCost
     }
   ];
   return { costPrice, shippingCost, unitCost, formulas };

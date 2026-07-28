@@ -1,30 +1,7 @@
 import { roundPence } from '../utils/math';
+import type { EbayCostBuilderInputs, EbayCostBuilderResult, EbayCostFormulaLine } from '../types';
 
-export interface EbayCostBuilderInputs {
-  costPerBatch: number;       // supplier price in pence (for the whole UoM batch)
-  uom: number;                // units per batch e.g. 12 if supplier sells packs of 12
-  qtyRequired: number;        // units needed per eBay listing
-  discountRate: number;       // supplier discount as a decimal e.g. 0.10 for 10%
-  packingMaterials: number;   // pence per item
-  ppCost: number;             // actual postage + packing cost in pence
-  ppIncludedInPrice: boolean; // true = bundle P+P into item price, false = charge separately
-  vatOnSellingPrice: number;  // VAT amount in pence the seller expects to remit on this item
-  listingFee: number;         // eBay fixed listing fee in pence
-  adCost: number;             // promoted listings fixed cost in pence
-}
-
-export interface EbayCostFormulaLine {
-  label: string;
-  formula: string;   // human-readable, with the actual inputs substituted in (pence, not pounds)
-  amount: number;     // pence
-}
-
-export interface EbayCostBuilderResult {
-  costPrice: number;          // feeds into CalculationOptions.costPrice
-  shippingCost: number;       // feeds into CalculationOptions.shippingCost
-  unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
-  formulas: EbayCostFormulaLine[]; // line-by-line working, so API callers can show it without reimplementing the maths
-}
+export type { EbayCostBuilderInputs, EbayCostBuilderResult, EbayCostFormulaLine };
 
 /**
  * Calculate the true cost of an eBay listing from supplier pricing inputs.
@@ -102,6 +79,11 @@ export function buildEbayCost(inputs: EbayCostBuilderInputs): EbayCostBuilderRes
       label: 'Cost price',
       formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
       amount: costPrice,
+    },
+    {
+      label: 'Shipping cost',
+      formula: ppIncludedInPrice ? '0 (P+P included in cost price)' : `${ppCost} (P+P charged separately)`,
+      amount: shippingCost,
     },
   ];
 

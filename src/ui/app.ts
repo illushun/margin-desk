@@ -8,7 +8,7 @@ import { buildEbayCost } from '../marketplaces/ebay-cost-builder';
 import { icons } from './icons';
 import type {
   CustomFee, CalculationOptions, SolverOptions,
-  SolverTargetMode, ExcludableFee, DebugTrace, EbayCostTrace,
+  SolverTargetMode, ExcludableFee, DebugTrace, EbayCostBuilderResult,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,7 @@ let customFees: CustomFee[] = [];
 let customFeeCounter = 0;
 let currentStep = 1;
 const visitedSteps = new Set<number>([1]);
+let lastEbayCostResult: EbayCostBuilderResult | undefined;
 
 // ---------------------------------------------------------------------------
 // DOM helper
@@ -162,7 +163,7 @@ function applyMarketplaceContext(): void {
 // eBay cost builder
 // ---------------------------------------------------------------------------
 
-function applyEbayCostBuilder(): void {
+function applyEbayCostBuilder(): EbayCostBuilderResult {
   const ppIncluded = el<HTMLInputElement>('ebay-pp-included').checked;
 
   const result = buildEbayCost({
@@ -184,32 +185,8 @@ function applyEbayCostBuilder(): void {
   const excl = el<HTMLInputElement>('exclude-shippingCost');
   excl.checked  = ppIncluded || excl.checked;
   excl.disabled = ppIncluded;
-}
 
-function buildEbayCostTrace(): EbayCostTrace | undefined {
-  if (el<HTMLSelectElement>('marketplace').value !== 'ebay-uk') return undefined;
-
-  const ppIncluded   = el<HTMLInputElement>('ebay-pp-included').checked;
-  const costPerBatch = poundsToPence(el<HTMLInputElement>('ebay-cost-per-batch').value);
-  const uom          = parseFloat(el<HTMLInputElement>('ebay-uom').value) || 1;
-  const qty          = parseFloat(el<HTMLInputElement>('ebay-qty-required').value) || 1;
-  const disc         = percentageToRate(el<HTMLInputElement>('ebay-discount').value);
-  const packing      = poundsToPence(el<HTMLInputElement>('ebay-packing-materials').value);
-  const ppCost       = poundsToPence(el<HTMLInputElement>('ebay-pp-cost').value);
-  const vatAmt       = poundsToPence(el<HTMLInputElement>('ebay-vat-amount').value);
-  const listingFee   = poundsToPence(el<HTMLInputElement>('ebay-listing-fee').value);
-  const adCost       = poundsToPence(el<HTMLInputElement>('ebay-ad-cost').value);
-
-  const safeUom  = uom <= 0 ? 1 : uom;
-  const unitCost = Math.round(((costPerBatch / safeUom) * qty) * (1 - disc));
-  const costPrice = unitCost + packing + (ppIncluded ? ppCost : 0) + vatAmt + listingFee + adCost;
-
-  return {
-    costPerBatch, uom, qtyRequired: qty, discountRate: disc, unitCost,
-    packingMaterials: packing, ppCost, ppIncludedInPrice: ppIncluded,
-    vatOnSellingPrice: vatAmt, listingFee, adCost,
-    costPrice, shippingCost: ppIncluded ? 0 : ppCost,
-  };
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +263,7 @@ function readExcludedFees(): Set<ExcludableFee> {
 
 function buildBaseOptions(): Omit<CalculationOptions, 'sellingPrice'> {
   const isEbay = el<HTMLSelectElement>('marketplace').value === 'ebay-uk';
-  if (isEbay) applyEbayCostBuilder();
+  lastEbayCostResult = isEbay ? applyEbayCostBuilder() : undefined;
 
   const costPrice    = isEbay
     ? parseInt(el<HTMLInputElement>('cost-price-ebay').value || '0')
@@ -355,9 +332,8 @@ function runAndShowResult(): void {
     const result = solveForPrice(config, solverOpts);
     renderSolverResult(resultBody, result);
 
-    const ebayCostTrace = buildEbayCostTrace();
-    const debugTrace: DebugTrace = ebayCostTrace
-      ? { fees: result.trace.feeTrace, solver: result.trace, ebayCost: ebayCostTrace }
+    const debugTrace: DebugTrace = lastEbayCostResult
+      ? { fees: result.trace.feeTrace, solver: result.trace, ebayCost: lastEbayCostResult }
       : { fees: result.trace.feeTrace, solver: result.trace };
     renderDebugTrace(debugContainer, debugTrace);
 
@@ -375,9 +351,8 @@ function runAndShowResult(): void {
     const { breakdown, trace: feeTrace } = calculateFeesWithTrace(config, { ...buildBaseOptions(), sellingPrice });
     renderBreakdown(resultBody, breakdown);
 
-    const ebayCostTrace = buildEbayCostTrace();
-    const debugTrace: DebugTrace = ebayCostTrace
-      ? { fees: feeTrace, ebayCost: ebayCostTrace }
+    const debugTrace: DebugTrace = lastEbayCostResult
+      ? { fees: feeTrace, ebayCost: lastEbayCostResult }
       : { fees: feeTrace };
     renderDebugTrace(debugContainer, debugTrace);
   }
