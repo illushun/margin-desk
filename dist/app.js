@@ -299,7 +299,7 @@
   function buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice) {
     const targetProfitFormula = options.targetMode === "margin" ? `${finalPrice} \xD7 ${options.targetMargin}` : "fixed target amount";
     return [
-      { label: "Algebraic starting estimate", formula: estimateFormula, amount: algebraicEstimate },
+      { label: "Starting price estimate", formula: estimateFormula, amount: algebraicEstimate },
       { label: "Target profit", formula: targetProfitFormula, amount: resolveTargetProfit(options, finalPrice) }
     ];
   }
@@ -586,7 +586,7 @@
   }
   function renderSolverTrace(t) {
     const targetLabel = t.targetMode === "margin" ? `${(t.targetMargin * 100).toFixed(1)}% net margin` : `${gbp(t.targetNetProfit)} net profit`;
-    const estimateFormula = t.formulas.find((f) => f.label === "Algebraic starting estimate");
+    const estimateFormula = t.formulas.find((f) => f.label === "Starting price estimate");
     const targetProfitFormula = t.formulas.find((f) => f.label === "Target profit");
     let rows = `
     <tr>
@@ -595,7 +595,7 @@
       <td class="debug-result">${targetProfitFormula ? gbp(targetProfitFormula.amount) : ""}</td>
     </tr>
     <tr>
-      <td class="debug-label">Algebraic estimate</td>
+      <td class="debug-label">Starting price estimate</td>
       <td class="debug-formula" colspan="2">${estimateFormula?.formula ?? ""}</td>
       <td class="debug-result">${gbp(t.algebraicEstimate)}</td>
     </tr>

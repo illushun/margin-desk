@@ -207,11 +207,11 @@ or, for a margin target:
 
 See the full worked example below.
 
-The response always includes a `trace` object alongside `requiredSellingPrice`, `breakdown`, and `converged` (no `?trace=true` needed, unlike `/api/calculate`). `trace.formulas` explains how the algebraic starting estimate and the target profit were derived, e.g. for a margin target:
+The response always includes a `trace` object alongside `requiredSellingPrice`, `breakdown`, and `converged` (no `?trace=true` needed, unlike `/api/calculate`). `trace.formulas` explains how the starting price estimate and the target profit were derived, e.g. for a margin target:
 
 ```json
 "formulas": [
-  { "label": "Algebraic starting estimate", "formula": "1230 ÷ (1 − 0.119 − 0.003 − 0 − 0.2)", "amount": 1814 },
+  { "label": "Starting price estimate", "formula": "1230 ÷ (1 − 0.119 − 0.003 − 0 − 0.2)", "amount": 1814 },
   { "label": "Target profit", "formula": "1814 × 0.2", "amount": 363 }
 ]
 ```

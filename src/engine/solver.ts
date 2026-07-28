@@ -116,7 +116,7 @@ function buildFormulaLines(
     : 'fixed target amount';
 
   return [
-    { label: 'Algebraic starting estimate', formula: estimateFormula, amount: algebraicEstimate },
+    { label: 'Starting price estimate', formula: estimateFormula, amount: algebraicEstimate },
     { label: 'Target profit', formula: targetProfitFormula, amount: resolveTargetProfit(options, finalPrice) },
   ];
 }

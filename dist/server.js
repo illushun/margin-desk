@@ -303,7 +303,7 @@ function ratchetToTarget(config, options, startPrice) {
 function buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice) {
   const targetProfitFormula = options.targetMode === "margin" ? `${finalPrice} \xD7 ${options.targetMargin}` : "fixed target amount";
   return [
-    { label: "Algebraic starting estimate", formula: estimateFormula, amount: algebraicEstimate },
+    { label: "Starting price estimate", formula: estimateFormula, amount: algebraicEstimate },
     { label: "Target profit", formula: targetProfitFormula, amount: resolveTargetProfit(options, finalPrice) }
   ];
 }

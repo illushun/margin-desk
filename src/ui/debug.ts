@@ -106,7 +106,7 @@ function renderSolverTrace(t: SolverTrace): string {
     ? `${(t.targetMargin * 100).toFixed(1)}% net margin`
     : `${gbp(t.targetNetProfit)} net profit`;
 
-  const estimateFormula = t.formulas.find((f) => f.label === 'Algebraic starting estimate');
+  const estimateFormula = t.formulas.find((f) => f.label === 'Starting price estimate');
   const targetProfitFormula = t.formulas.find((f) => f.label === 'Target profit');
 
   let rows = `
@@ -116,7 +116,7 @@ function renderSolverTrace(t: SolverTrace): string {
       <td class="debug-result">${targetProfitFormula ? gbp(targetProfitFormula.amount) : ''}</td>
     </tr>
     <tr>
-      <td class="debug-label">Algebraic estimate</td>
+      <td class="debug-label">Starting price estimate</td>
       <td class="debug-formula" colspan="2">${estimateFormula?.formula ?? ''}</td>
       <td class="debug-result">${gbp(t.algebraicEstimate)}</td>
     </tr>
