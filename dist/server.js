@@ -252,20 +252,37 @@ function estimateSellingPrice(config, options) {
   const constants = costPrice + shipping + config.closingFee + paymentFixed + fixedCustomFees;
   if (options.targetMode === "margin") {
     const divisor2 = 1 - referralRate - paymentRate - percentageOfSaleCustomRates - options.targetMargin;
-    if (divisor2 <= 0) return roundPence(constants * 10);
-    return roundPence(constants / divisor2);
+    if (divisor2 <= 0) {
+      return { estimate: roundPence(constants * 10), formula: `${constants} \xD7 10 (percentage rates left no positive divisor)` };
+    }
+    return {
+      estimate: roundPence(constants / divisor2),
+      formula: `${constants} \xF7 (1 \u2212 ${referralRate} \u2212 ${paymentRate} \u2212 ${percentageOfSaleCustomRates} \u2212 ${options.targetMargin})`
+    };
   }
   const totalPercentageRate = referralRate + paymentRate + percentageOfSaleCustomRates;
   const divisor = 1 - totalPercentageRate;
-  if (divisor <= 0) return roundPence(constants + options.targetNetProfit);
-  return roundPence((constants + options.targetNetProfit) / divisor);
+  if (divisor <= 0) {
+    return { estimate: roundPence(constants + options.targetNetProfit), formula: `${constants} + ${options.targetNetProfit} (percentage rates left no positive divisor)` };
+  }
+  return {
+    estimate: roundPence((constants + options.targetNetProfit) / divisor),
+    formula: `(${constants} + ${options.targetNetProfit}) \xF7 (1 \u2212 ${totalPercentageRate})`
+  };
 }
 function resolveTargetProfit(options, currentPrice) {
   if (options.targetMode === "fixed") return options.targetNetProfit;
   return roundPence(currentPrice * options.targetMargin);
 }
+function buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice) {
+  const targetProfitFormula = options.targetMode === "margin" ? `${finalPrice} \xD7 ${options.targetMargin}` : "fixed target amount";
+  return [
+    { label: "Algebraic starting estimate", formula: estimateFormula, amount: algebraicEstimate },
+    { label: "Target profit", formula: targetProfitFormula, amount: resolveTargetProfit(options, finalPrice) }
+  ];
+}
 function solveForPrice(config, options) {
-  const algebraicEstimate = estimateSellingPrice(config, options);
+  const { estimate: algebraicEstimate, formula: estimateFormula } = estimateSellingPrice(config, options);
   let price = algebraicEstimate;
   let converged = false;
   const iterations = [];
@@ -292,6 +309,7 @@ function solveForPrice(config, options) {
         iterations,
         converged,
         finalPrice,
+        formulas: buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice),
         feeTrace: feeTrace2
       };
       return { requiredSellingPrice: finalPrice, breakdown: finalBreakdown, converged, trace: trace2 };
@@ -307,6 +325,7 @@ function solveForPrice(config, options) {
     iterations,
     converged: false,
     finalPrice: price,
+    formulas: buildFormulaLines(options, algebraicEstimate, estimateFormula, price),
     feeTrace
   };
   return { requiredSellingPrice: price, breakdown, converged: false, trace };

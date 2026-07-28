@@ -179,6 +179,12 @@ export interface SolverIteration {
   error: number;
 }
 
+export interface SolverFormulaLine {
+  label: string;
+  formula: string;   // human-readable, with the actual inputs substituted in
+  amount: number;     // pence
+}
+
 export interface SolverTrace {
   targetMode: SolverTargetMode;
   targetNetProfit: number;
@@ -187,6 +193,7 @@ export interface SolverTrace {
   iterations: SolverIteration[];
   converged: boolean;
   finalPrice: number;
+  formulas: SolverFormulaLine[]; // how the algebraic estimate and target profit were derived
 }
 
 export interface DebugTrace {

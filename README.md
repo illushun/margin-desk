@@ -192,6 +192,17 @@ or, for a margin target:
 
 See the full worked example below.
 
+The response always includes a `trace` object alongside `requiredSellingPrice`, `breakdown`, and `converged` (no `?trace=true` needed, unlike `/api/calculate`). `trace.formulas` explains how the algebraic starting estimate and the target profit were derived, e.g. for a margin target:
+
+```json
+"formulas": [
+  { "label": "Algebraic starting estimate", "formula": "1230 ÷ (1 − 0.119 − 0.003 − 0 − 0.2)", "amount": 1814 },
+  { "label": "Target profit", "formula": "1814 × 0.2", "amount": 363 }
+]
+```
+
+For a fixed profit target, `Target profit` is just `"fixed target amount"` since it doesn't depend on the selling price. `trace.feeTrace` has the same per-fee formula breakdown as `/api/calculate?trace=true`.
+
 ### `POST /api/ebay-cost`
 
 Runs the eBay cost builder (supplier pricing to true unit cost) independently of a full calculation. Useful when you want to show a seller their true unit cost before they commit to a selling price.

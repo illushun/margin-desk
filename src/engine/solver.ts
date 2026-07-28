@@ -1,4 +1,4 @@
-import type { MarketplaceConfig, SolverOptions, SolverResult, SolverTrace, FeeTrace } from '../types';
+import type { MarketplaceConfig, SolverOptions, SolverResult, SolverTrace, SolverFormulaLine, FeeTrace } from '../types';
 import { calculateFees, calculateFeesWithTrace } from './fees';
 import { roundPence } from '../utils/math';
 
@@ -23,7 +23,7 @@ const CONVERGENCE_THRESHOLD = 1; // within 1 pence is close enough
 function estimateSellingPrice(
   config: MarketplaceConfig,
   options: SolverOptions,
-): number {
+): { estimate: number; formula: string } {
   const { costPrice, shippingCost, excludedFees } = options;
 
   const referralRate  = excludedFees.has('referralFee') ? 0 : (config.referralFees[0]?.rate ?? 0);
@@ -48,20 +48,46 @@ function estimateSellingPrice(
 
   if (options.targetMode === 'margin') {
     const divisor = 1 - referralRate - paymentRate - percentageOfSaleCustomRates - options.targetMargin;
-    if (divisor <= 0) return roundPence(constants * 10);
-    return roundPence(constants / divisor);
+    if (divisor <= 0) {
+      return { estimate: roundPence(constants * 10), formula: `${constants} × 10 (percentage rates left no positive divisor)` };
+    }
+    return {
+      estimate: roundPence(constants / divisor),
+      formula: `${constants} ÷ (1 − ${referralRate} − ${paymentRate} − ${percentageOfSaleCustomRates} − ${options.targetMargin})`,
+    };
   }
 
   const totalPercentageRate = referralRate + paymentRate + percentageOfSaleCustomRates;
   const divisor = 1 - totalPercentageRate;
-  if (divisor <= 0) return roundPence(constants + options.targetNetProfit);
+  if (divisor <= 0) {
+    return { estimate: roundPence(constants + options.targetNetProfit), formula: `${constants} + ${options.targetNetProfit} (percentage rates left no positive divisor)` };
+  }
 
-  return roundPence((constants + options.targetNetProfit) / divisor);
+  return {
+    estimate: roundPence((constants + options.targetNetProfit) / divisor),
+    formula: `(${constants} + ${options.targetNetProfit}) ÷ (1 − ${totalPercentageRate})`,
+  };
 }
 
 function resolveTargetProfit(options: SolverOptions, currentPrice: number): number {
   if (options.targetMode === 'fixed') return options.targetNetProfit;
   return roundPence(currentPrice * options.targetMargin);
+}
+
+function buildFormulaLines(
+  options: SolverOptions,
+  algebraicEstimate: number,
+  estimateFormula: string,
+  finalPrice: number,
+): SolverFormulaLine[] {
+  const targetProfitFormula = options.targetMode === 'margin'
+    ? `${finalPrice} × ${options.targetMargin}`
+    : 'fixed target amount';
+
+  return [
+    { label: 'Algebraic starting estimate', formula: estimateFormula, amount: algebraicEstimate },
+    { label: 'Target profit', formula: targetProfitFormula, amount: resolveTargetProfit(options, finalPrice) },
+  ];
 }
 
 /**
@@ -72,7 +98,7 @@ export function solveForPrice(
   config: MarketplaceConfig,
   options: SolverOptions,
 ): SolverResult & { trace: SolverTrace & { feeTrace: FeeTrace } } {
-  const algebraicEstimate = estimateSellingPrice(config, options);
+  const { estimate: algebraicEstimate, formula: estimateFormula } = estimateSellingPrice(config, options);
   let price = algebraicEstimate;
   let converged = false;
 
@@ -104,6 +130,7 @@ export function solveForPrice(
         iterations,
         converged,
         finalPrice,
+        formulas: buildFormulaLines(options, algebraicEstimate, estimateFormula, finalPrice),
         feeTrace,
       };
 
@@ -122,6 +149,7 @@ export function solveForPrice(
     iterations,
     converged: false,
     finalPrice: price,
+    formulas: buildFormulaLines(options, algebraicEstimate, estimateFormula, price),
     feeTrace,
   };
 
