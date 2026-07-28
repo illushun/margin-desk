@@ -36,7 +36,7 @@ Keep a browser tab open to `index.html` and refresh after each build. Because th
 
 **Calculate profit**: enter a selling price and see the full fee breakdown, net profit, margin, and ROI.
 
-**Find selling price**: enter a target net profit and the calculator works backwards to find the minimum price you need to charge.
+**Find selling price**: enter a target, either a fixed net profit or a net margin percentage, and the calculator works backwards to find the minimum price you need to charge. The result is guaranteed to meet or exceed the target, never fall short of it.
 
 ### VAT handling
 
@@ -204,6 +204,8 @@ or, for a margin target:
   "targetMargin": 0.2
 }
 ```
+
+`requiredSellingPrice` is guaranteed to meet or exceed the target, it never rounds down below what you asked for. `converged` is `true` when the solver landed on that price within its normal iteration budget; if it's `false` (only possible when the requested target is mathematically unreachable, e.g. a margin higher than 100% minus the marketplace's fee rates), treat `requiredSellingPrice` as unreliable and surface that to the caller rather than trusting it blindly.
 
 See the full worked example below.
 
