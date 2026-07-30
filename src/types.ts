@@ -227,3 +227,84 @@ export interface DebugTrace {
   fees: FeeTrace;
   solver?: SolverTrace;       // only present in solve mode
 }
+
+// ---------------------------------------------------------------------------
+// eBay pricing calculator (Laravel-resolved inputs)
+//
+// A self-contained calculator for POST /api/ebay-calculate. Unlike the rest
+// of the engine, the caller (a Laravel service) has already resolved cost
+// lookups, discount rates, delivery codes, packing materials, and the target
+// margin -- this endpoint performs the maths only, on an eBay-specific
+// input/output shape distinct from CalculationOptions/FeeBreakdown.
+// ---------------------------------------------------------------------------
+
+/** Wire shape for POST /api/ebay-calculate. Optional fields get server-side defaults. */
+export interface EbayCalculateRequest {
+  costPerBatch: number;       // pence -- supplier cost (from Merlin or exclusion)
+  uom: number;                // units per batch, minimum 1
+  qtyRequired: number;        // units per listing
+  discountRate: number;       // decimal e.g. 0.22 for 22%
+  packingMaterials: number;   // pence -- fixed per item
+  ppCost: number;             // pence -- actual postage cost
+  ppIncludedInPrice: boolean; // true = P+P bundled into selling price
+  targetMargin: number;       // decimal e.g. 0.05 for 5%
+  adRate?: number;            // decimal e.g. 0.05 for 5%, default 0
+  ebayFeeRate?: number;       // decimal, default 0.129
+  ebayFeeFlat?: number;       // pence, default 36
+  vatRate?: number;           // decimal, default 0.1667
+}
+
+/** EbayCalculateRequest with every optional field's default already applied. */
+export interface EbayCalculatorInputs {
+  costPerBatch: number;
+  uom: number;
+  qtyRequired: number;
+  discountRate: number;
+  packingMaterials: number;
+  ppCost: number;
+  ppIncludedInPrice: boolean;
+  targetMargin: number;
+  adRate: number;
+  ebayFeeRate: number;
+  ebayFeeFlat: number;
+  vatRate: number;
+}
+
+export interface EbayCalculateResponse {
+  suggestedPrice: number;  // pence -- guaranteed to meet or exceed targetMargin
+  breakEvenPrice: number;  // pence -- zero-profit price, not margin-guaranteed
+
+  costs: {
+    lineCost: number;
+    packingMaterials: number;
+    ppCost: number;          // 0 if ppIncludedInPrice is false
+    ebayFeeFlat: number;
+    fixedCosts: number;      // sum of the above
+  };
+
+  fees: {
+    ebayFeeRate: number;
+    ebayFeeAmount: number;   // (suggestedPrice x rate) + flat
+    vatRate: number;
+    vatAmount: number;
+    adRate: number;
+    adAmount: number;
+    totalFees: number;
+  };
+
+  totalCosts: number;
+  profit: number;
+  marginPercent: number;   // 2dp percentage, e.g. 5.01
+  roi: number;             // 2dp percentage, e.g. 7.70
+
+  solver: {
+    fixedCosts: number;
+    combinedRate: number;   // ebayFeeRate + vatRate + adRate
+    targetMargin: number;
+    divisor: number;        // 1 - combinedRate - targetMargin
+    formula: string;        // human-readable working, for the finance team
+    converged: boolean;     // false only when divisor <= 0
+  };
+
+  inputs: EbayCalculatorInputs; // resolved inputs echoed back for trace/debug
+}

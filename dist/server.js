@@ -509,6 +509,111 @@ function buildEbayCost(inputs) {
   return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas, formulaText };
 }
 
+// src/marketplaces/ebay-calculator.ts
+var MAX_RATCHET_STEPS2 = 20;
+function computeStage4(price, fixedCosts, ebayFeeRate, ebayFeeFlat, vatRate, adRate) {
+  const ebayFeeAmount = roundPence(price * ebayFeeRate) + ebayFeeFlat;
+  const vatAmount = roundPence(price * vatRate);
+  const adAmount = roundPence(price * adRate);
+  const totalFees = ebayFeeAmount + vatAmount + adAmount;
+  const totalCosts = fixedCosts + ebayFeeAmount + vatAmount + adAmount - ebayFeeFlat;
+  const profit = price - totalCosts;
+  return { ebayFeeAmount, vatAmount, adAmount, totalFees, totalCosts, profit };
+}
+function targetProfitFor(price, targetMargin) {
+  return Math.ceil(price * targetMargin);
+}
+function roundRate(value) {
+  return Math.round(value * 1e6) / 1e6;
+}
+function calculateEbayPrice(inputs) {
+  const {
+    costPerBatch,
+    uom,
+    qtyRequired,
+    discountRate,
+    packingMaterials,
+    ppCost,
+    ppIncludedInPrice,
+    targetMargin,
+    adRate,
+    ebayFeeRate,
+    ebayFeeFlat,
+    vatRate
+  } = inputs;
+  const safeUom = uom > 0 ? uom : 1;
+  const lineCost = roundPence(costPerBatch / safeUom * qtyRequired * (1 - discountRate));
+  const ppCostIncluded = ppIncludedInPrice ? ppCost : 0;
+  const fixedCosts = lineCost + packingMaterials + ppCostIncluded + ebayFeeFlat;
+  const combinedRate = roundRate(ebayFeeRate + vatRate + adRate);
+  const divisor = roundRate(1 - combinedRate - targetMargin);
+  const converged = divisor > 0;
+  const algebraicEstimate = converged ? roundPence(fixedCosts / divisor) : 0;
+  const breakEvenDivisor = roundRate(1 - combinedRate);
+  const breakEvenPrice = breakEvenDivisor > 0 ? roundPence(fixedCosts / breakEvenDivisor) : 0;
+  let suggestedPrice = algebraicEstimate;
+  let stage4 = computeStage4(suggestedPrice, fixedCosts, ebayFeeRate, ebayFeeFlat, vatRate, adRate);
+  if (converged) {
+    for (let i = 0; i < MAX_RATCHET_STEPS2 && stage4.profit < targetProfitFor(suggestedPrice, targetMargin); i++) {
+      suggestedPrice += 1;
+      stage4 = computeStage4(suggestedPrice, fixedCosts, ebayFeeRate, ebayFeeFlat, vatRate, adRate);
+    }
+  }
+  const profit = stage4.profit;
+  const marginPercent = suggestedPrice > 0 ? Math.round(profit / suggestedPrice * 1e4) / 100 : 0;
+  const roi = lineCost > 0 ? Math.round(profit / lineCost * 1e4) / 100 : 0;
+  let formula = `${fixedCosts}p \xF7 (1 \u2212 ${ebayFeeRate} \u2212 ${vatRate} \u2212 ${adRate} \u2212 ${targetMargin}) = ${algebraicEstimate}p (\xA3${(algebraicEstimate / 100).toFixed(2)})`;
+  if (suggestedPrice !== algebraicEstimate) {
+    formula += ` \u2192 adjusted to ${suggestedPrice}p (\xA3${(suggestedPrice / 100).toFixed(2)}) to guarantee target margin`;
+  }
+  return {
+    suggestedPrice,
+    breakEvenPrice,
+    costs: {
+      lineCost,
+      packingMaterials,
+      ppCost: ppCostIncluded,
+      ebayFeeFlat,
+      fixedCosts
+    },
+    fees: {
+      ebayFeeRate,
+      ebayFeeAmount: stage4.ebayFeeAmount,
+      vatRate,
+      vatAmount: stage4.vatAmount,
+      adRate,
+      adAmount: stage4.adAmount,
+      totalFees: stage4.totalFees
+    },
+    totalCosts: stage4.totalCosts,
+    profit,
+    marginPercent,
+    roi,
+    solver: {
+      fixedCosts,
+      combinedRate,
+      targetMargin,
+      divisor,
+      formula,
+      converged
+    },
+    inputs: {
+      costPerBatch,
+      uom,
+      qtyRequired,
+      discountRate,
+      packingMaterials,
+      ppCost,
+      ppIncludedInPrice,
+      targetMargin,
+      adRate,
+      ebayFeeRate,
+      ebayFeeFlat,
+      vatRate
+    }
+  };
+}
+
 // src/api/server.ts
 var PORT = Number(process.env.PORT) || 3e3;
 var API_KEY = process.env.API_KEY;
@@ -702,6 +807,26 @@ function handleEbayCost(body) {
     adCost: parseEbayFeeInput(body, "adCost")
   });
 }
+function parseEbayCalculateRequest(body) {
+  return {
+    costPerBatch: requireNumber(body, "costPerBatch"),
+    uom: requireNumber(body, "uom"),
+    qtyRequired: requireNumber(body, "qtyRequired"),
+    discountRate: requireNumber(body, "discountRate"),
+    packingMaterials: requireNumber(body, "packingMaterials"),
+    ppCost: requireNumber(body, "ppCost"),
+    ppIncludedInPrice: body.ppIncludedInPrice === true,
+    targetMargin: requireNumber(body, "targetMargin"),
+    adRate: optionalNumber(body, "adRate", 0),
+    ebayFeeRate: optionalNumber(body, "ebayFeeRate", 0.129),
+    ebayFeeFlat: optionalNumber(body, "ebayFeeFlat", 36),
+    vatRate: optionalNumber(body, "vatRate", 0.1667)
+  };
+}
+function handleEbayCalculate(body) {
+  if (!isRecord(body)) throw new ApiError(400, "Request body must be a JSON object");
+  return calculateEbayPrice(parseEbayCalculateRequest(body));
+}
 async function router(req, res) {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const { pathname, searchParams } = url;
@@ -714,7 +839,8 @@ async function router(req, res) {
         "GET  /api/marketplaces/:id",
         "POST /api/calculate",
         "POST /api/solve",
-        "POST /api/ebay-cost"
+        "POST /api/ebay-cost",
+        "POST /api/ebay-calculate"
       ]
     };
   }
@@ -733,6 +859,9 @@ async function router(req, res) {
   }
   if (pathname === "/api/ebay-cost" && method === "POST") {
     return handleEbayCost(await readBody(req));
+  }
+  if (pathname === "/api/ebay-calculate" && method === "POST") {
+    return handleEbayCalculate(await readBody(req));
   }
   throw new ApiError(404, `No route for ${method} ${pathname}`);
 }

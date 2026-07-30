@@ -278,6 +278,100 @@ Pass `{ "mode": "fixed", "amount": 400 }` instead when VAT or ad cost is a pence
 
 `formulaText` is the same chain reduced to one readable line -- note it only includes terms that actually sum into `costPrice`: P+P is skipped here because it was charged as shipping instead, and VAT/ad cost are skipped because they're rate-mode (their real amount doesn't exist until a selling price is known; see `generatedCustomFees` above). Zero-amount terms (e.g. packing materials left at £0) are omitted too, same as `/api/calculate`'s `formulaText`. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
 
+### `POST /api/ebay-calculate`
+
+A self-contained eBay pricing calculator for callers (e.g. a Laravel service) that have already resolved cost lookups, discount rates, delivery codes, packing materials, and the target margin -- this endpoint performs the maths only, on its own request/response shape, independent of `/api/calculate`, `/api/solve`, and `/api/ebay-cost`.
+
+Request fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `costPerBatch` | number | required, pence -- supplier cost for the whole unit-of-measure batch |
+| `uom` | number | required, units per batch (falls back to 1 if zero or negative) |
+| `qtyRequired` | number | required, units needed per listing |
+| `discountRate` | number | required, decimal e.g. `0.22` for 22% |
+| `packingMaterials` | number | required, pence, fixed per item |
+| `ppCost` | number | required, pence, actual postage cost |
+| `ppIncludedInPrice` | boolean | required, `true` bundles P+P into the selling price |
+| `targetMargin` | number | required, decimal e.g. `0.05` for 5% |
+| `adRate` | number | optional, decimal, defaults to `0` |
+| `ebayFeeRate` | number | optional, decimal, defaults to `0.129` |
+| `ebayFeeFlat` | number | optional, pence, defaults to `36` |
+| `vatRate` | number | optional, decimal, defaults to `0.1667` |
+
+```bash
+curl -X POST localhost:3000/api/ebay-calculate \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "costPerBatch": 500,
+    "uom": 1,
+    "qtyRequired": 5,
+    "discountRate": 0,
+    "packingMaterials": 145,
+    "ppCost": 533,
+    "ppIncludedInPrice": true,
+    "targetMargin": 0.05
+  }'
+```
+
+That's a £5.00 unit cost times 5 units, no supplier discount, £1.45 packing materials, £5.33 postage bundled into the selling price, and a 5% target margin (ad rate, eBay fee rate/flat, and VAT rate all left at their defaults):
+
+```json
+{
+  "suggestedPrice": 4913,
+  "breakEvenPrice": 4563,
+  "costs": {
+    "lineCost": 2500,
+    "packingMaterials": 145,
+    "ppCost": 533,
+    "ebayFeeFlat": 36,
+    "fixedCosts": 3214
+  },
+  "fees": {
+    "ebayFeeRate": 0.129,
+    "ebayFeeAmount": 670,
+    "vatRate": 0.1667,
+    "vatAmount": 819,
+    "adRate": 0,
+    "adAmount": 0,
+    "totalFees": 1489
+  },
+  "totalCosts": 4667,
+  "profit": 246,
+  "marginPercent": 5.01,
+  "roi": 9.84,
+  "solver": {
+    "fixedCosts": 3214,
+    "combinedRate": 0.2957,
+    "targetMargin": 0.05,
+    "divisor": 0.6543,
+    "formula": "3214p ÷ (1 − 0.129 − 0.1667 − 0 − 0.05) = 4912p (£49.12) → adjusted to 4913p (£49.13) to guarantee target margin",
+    "converged": true
+  },
+  "inputs": {
+    "costPerBatch": 500,
+    "uom": 1,
+    "qtyRequired": 5,
+    "discountRate": 0,
+    "packingMaterials": 145,
+    "ppCost": 533,
+    "ppIncludedInPrice": true,
+    "targetMargin": 0.05,
+    "adRate": 0,
+    "ebayFeeRate": 0.129,
+    "ebayFeeFlat": 36,
+    "vatRate": 0.1667
+  }
+}
+```
+
+`suggestedPrice` is guaranteed to meet or exceed `targetMargin`, same "never fall short" guarantee `/api/solve` makes elsewhere in this API. The pure algebraic divide (`fixedCosts ÷ (1 − combinedRate − targetMargin)`) lands one penny under 5% here -- £49.12 gives a margin of 4.99%, a hair under target once pence rounding applies -- so the price is nudged up a penny at a time (same pattern as the main solver's ratchet step) until margin actually clears 5%. `solver.formula` shows both figures so the finance team can see the raw algebra alongside the adjustment. `solver.converged` is only `false` when `ebayFeeRate + vatRate + adRate + targetMargin >= 1` (no positive divisor exists -- rates and margin alone exceed 100% of the selling price), in which case `suggestedPrice` and `breakEvenPrice` come back as `0` and should be treated as unreliable.
+
+`breakEvenPrice` is the zero-profit price (`fixedCosts ÷ (1 − combinedRate)`) and is not margin-ratcheted -- it's a reference point, not a target.
+
+The `fees` object is fee amounts derived from the final `suggestedPrice`, for display -- eBay's final value fee ("`ebayFeeAmount`", combining `ebayFeeRate` and the flat `ebayFeeFlat`), VAT on the selling price (`vatAmount`), and ad/promoted listings cost (`adAmount`). `inputs` echoes back every resolved value (defaults included) for trace/debug purposes.
+
 ### Shared request fields
 
 Both `/api/calculate` and `/api/solve` accept:
@@ -449,6 +543,7 @@ margin-desk/
       bandq.ts              B&Q Marketplace fee config
       index.ts              Registry, single import point for all configs
       ebay-cost-builder.ts  Supplier pricing to true unit cost
+      ebay-calculator.ts    Laravel-resolved inputs -> suggested price (POST /api/ebay-calculate)
     engine/
       fees.ts               calculateFees(config, options) -> FeeBreakdown
       solver.ts             solveForPrice(config, options) -> SolverResult

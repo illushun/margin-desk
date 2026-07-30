@@ -5,6 +5,7 @@ import { calculateFees, calculateFeesWithTrace } from '../engine/fees';
 import { solveForPrice } from '../engine/solver';
 import { buildFormulaText } from '../engine/breakdown-text';
 import { buildEbayCost } from '../marketplaces/ebay-cost-builder';
+import { calculateEbayPrice } from '../marketplaces/ebay-calculator';
 import type {
   CalculationOptions,
   SolverOptions,
@@ -13,6 +14,7 @@ import type {
   SolverTargetMode,
   EbayFeeInput,
   PaymentFee,
+  EbayCalculatorInputs,
 } from '../types';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -261,6 +263,34 @@ function handleEbayCost(body: unknown) {
   });
 }
 
+/**
+ * Request fields for POST /api/ebay-calculate. Unlike parseCommonOptions,
+ * every value here is already fully resolved by the calling Laravel service
+ * (cost lookups, discount resolution, delivery codes, packing materials,
+ * tiered margin) -- this endpoint performs the maths only.
+ */
+function parseEbayCalculateRequest(body: Record<string, unknown>): EbayCalculatorInputs {
+  return {
+    costPerBatch: requireNumber(body, 'costPerBatch'),
+    uom: requireNumber(body, 'uom'),
+    qtyRequired: requireNumber(body, 'qtyRequired'),
+    discountRate: requireNumber(body, 'discountRate'),
+    packingMaterials: requireNumber(body, 'packingMaterials'),
+    ppCost: requireNumber(body, 'ppCost'),
+    ppIncludedInPrice: body.ppIncludedInPrice === true,
+    targetMargin: requireNumber(body, 'targetMargin'),
+    adRate: optionalNumber(body, 'adRate', 0),
+    ebayFeeRate: optionalNumber(body, 'ebayFeeRate', 0.129),
+    ebayFeeFlat: optionalNumber(body, 'ebayFeeFlat', 36),
+    vatRate: optionalNumber(body, 'vatRate', 0.1667),
+  };
+}
+
+function handleEbayCalculate(body: unknown) {
+  if (!isRecord(body)) throw new ApiError(400, 'Request body must be a JSON object');
+  return calculateEbayPrice(parseEbayCalculateRequest(body));
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -279,6 +309,7 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<unknow
         'POST /api/calculate',
         'POST /api/solve',
         'POST /api/ebay-cost',
+        'POST /api/ebay-calculate',
       ],
     };
   }
@@ -302,6 +333,10 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<unknow
 
   if (pathname === '/api/ebay-cost' && method === 'POST') {
     return handleEbayCost(await readBody(req));
+  }
+
+  if (pathname === '/api/ebay-calculate' && method === 'POST') {
+    return handleEbayCalculate(await readBody(req));
   }
 
   throw new ApiError(404, `No route for ${method} ${pathname}`);
