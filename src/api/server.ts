@@ -218,11 +218,11 @@ function handleCalculate(body: unknown, withTrace: boolean) {
 
   if (withTrace) {
     const { breakdown, trace } = calculateFeesWithTrace(config, options);
-    return { breakdown, trace, formulaText: buildFormulaText(breakdown, options.excludedFees) };
+    return { breakdown, trace, formulaText: buildFormulaText(breakdown, options.excludedFees, config) };
   }
 
   const breakdown = calculateFees(config, options);
-  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees) };
+  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees, config) };
 }
 
 const VALID_TARGET_MODES: SolverTargetMode[] = ['fixed', 'margin'];
@@ -244,7 +244,7 @@ function handleSolve(body: unknown) {
   };
 
   const result = solveForPrice(config, options);
-  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees) };
+  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees, config) };
 }
 
 function handleEbayCost(body: unknown) {

@@ -1,4 +1,4 @@
-import type { FeeBreakdown, SolverResult, ExcludableFee } from '../types';
+import type { FeeBreakdown, SolverResult, ExcludableFee, MarketplaceConfig } from '../types';
 import { formatGBP } from '../utils/currency';
 import { buildBreakdownRows, buildFormulaText } from '../engine/breakdown-text';
 
@@ -39,8 +39,8 @@ function readExcluded(): Set<ExcludableFee> {
 // Breakdown table
 // ---------------------------------------------------------------------------
 
-function buildBreakdownHTML(b: FeeBreakdown, excluded: Set<ExcludableFee>): string {
-  const rows = buildBreakdownRows(b, excluded);
+function buildBreakdownHTML(b: FeeBreakdown, excluded: Set<ExcludableFee>, config: MarketplaceConfig): string {
+  const rows = buildBreakdownRows(b, excluded, config);
   const tableRows = rows.map((r) => {
     let cls = '';
     if (r.isDeduction) cls = 'deduction';
@@ -65,7 +65,7 @@ function buildBreakdownHTML(b: FeeBreakdown, excluded: Set<ExcludableFee>): stri
 // Render result into the result sheet body
 // ---------------------------------------------------------------------------
 
-export function renderBreakdown(container: HTMLElement, breakdown: FeeBreakdown): void {
+export function renderBreakdown(container: HTMLElement, breakdown: FeeBreakdown, config: MarketplaceConfig): void {
   const excluded = readExcluded();
   const cls = breakdown.netProfit >= 0 ? 'positive' : 'negative';
 
@@ -87,10 +87,10 @@ export function renderBreakdown(container: HTMLElement, breakdown: FeeBreakdown)
     </div>
 
     <p class="breakdown-section-title">Breakdown</p>
-    ${buildBreakdownHTML(breakdown, excluded)}
+    ${buildBreakdownHTML(breakdown, excluded, config)}
 
     <p class="breakdown-section-title">As a formula</p>
-    <p class="breakdown-formula">${buildFormulaText(breakdown, excluded)}</p>
+    <p class="breakdown-formula">${buildFormulaText(breakdown, excluded, config)}</p>
 
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;
@@ -106,7 +106,7 @@ export function renderBreakdown(container: HTMLElement, breakdown: FeeBreakdown)
   });
 }
 
-export function renderSolverResult(container: HTMLElement, result: SolverResult): void {
+export function renderSolverResult(container: HTMLElement, result: SolverResult, config: MarketplaceConfig): void {
   const excluded = readExcluded();
 
   container.innerHTML = `
@@ -128,10 +128,10 @@ export function renderSolverResult(container: HTMLElement, result: SolverResult)
     </div>
 
     <p class="breakdown-section-title">Breakdown</p>
-    ${buildBreakdownHTML(result.breakdown, excluded)}
+    ${buildBreakdownHTML(result.breakdown, excluded, config)}
 
     <p class="breakdown-section-title">As a formula</p>
-    <p class="breakdown-formula">${buildFormulaText(result.breakdown, excluded)}</p>
+    <p class="breakdown-formula">${buildFormulaText(result.breakdown, excluded, config)}</p>
 
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;

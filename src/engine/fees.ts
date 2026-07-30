@@ -201,10 +201,13 @@ export function calculateFeesWithTrace(
       ? 'not applicable (not VAT registered)'
       : `${marketplaceFeeSubtotal} × ${vatRate}`;
 
+  const referralLabel = config.referralFeeLabel ?? 'Referral fee';
+  const paymentLabel = config.paymentFeeLabel ?? 'Payment processing fee';
+
   const formulas: FormulaLine[] = [
-    { label: 'Referral fee', formula: referralFormula, amount: referral.fee, excluded: excludedFees.has('referralFee') },
+    { label: referralLabel, formula: referralFormula, amount: referral.fee, excluded: excludedFees.has('referralFee') },
     { label: 'Closing fee', formula: 'fixed per item', amount: closingFee },
-    { label: 'Payment processing fee', formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has('paymentFee') },
+    { label: paymentLabel, formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has('paymentFee') },
     { label: 'Fulfilment fee', formula: 'weight/mode lookup', amount: rawFulfilmentFee, excluded: excludedFees.has('fulfilmentFee') },
     { label: 'Shipping cost', formula: 'entered amount', amount: rawShippingCost, excluded: excludedFees.has('shippingCost') },
     { label: 'VAT on fees', formula: vatFormula, amount: rawVatOnFees, excluded: excludedFees.has('vatOnFees') },

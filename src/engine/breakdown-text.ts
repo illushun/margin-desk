@@ -1,5 +1,9 @@
-import type { FeeBreakdown, ExcludableFee } from '../types';
+import type { FeeBreakdown, ExcludableFee, MarketplaceConfig } from '../types';
 import { formatGBP } from '../utils/currency';
+
+/** The only parts of a MarketplaceConfig this module needs -- keeps it decoupled
+ * from the full config shape. */
+type BreakdownLabels = Pick<MarketplaceConfig, 'referralFeeLabel' | 'paymentFeeLabel'>;
 
 /** One line of a fee breakdown: a label, a pence amount, and how it should read. */
 export interface BreakdownRow {
@@ -15,16 +19,19 @@ export interface BreakdownRow {
  * be read top to bottom. Excluded fees are still included (with isExcluded set)
  * so callers can choose to show them struck through rather than dropping them silently.
  */
-export function buildBreakdownRows(b: FeeBreakdown, excluded: Set<ExcludableFee>): BreakdownRow[] {
+export function buildBreakdownRows(b: FeeBreakdown, excluded: Set<ExcludableFee>, labels: BreakdownLabels): BreakdownRow[] {
+  const referralLabel = labels.referralFeeLabel ?? 'Referral fee';
+  const paymentLabel = labels.paymentFeeLabel ?? 'Payment fee';
+
   const rows: BreakdownRow[] = [
     { label: 'Selling price', amount: b.sellingPrice },
     { label: 'Cost price', amount: b.costPrice, isDeduction: true },
-    { label: 'Referral fee', amount: b.referralFee, isDeduction: true, isExcluded: excluded.has('referralFee') },
+    { label: referralLabel, amount: b.referralFee, isDeduction: true, isExcluded: excluded.has('referralFee') },
   ];
 
   if (b.closingFee > 0) rows.push({ label: 'Closing fee', amount: b.closingFee, isDeduction: true });
 
-  rows.push({ label: 'Payment fee', amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has('paymentFee') });
+  rows.push({ label: paymentLabel, amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has('paymentFee') });
 
   if (b.fulfilmentFee > 0 || excluded.has('fulfilmentFee')) {
     rows.push({ label: 'Fulfilment fee', amount: b.fulfilmentFee, isDeduction: true, isExcluded: excluded.has('fulfilmentFee') });
@@ -47,8 +54,8 @@ export function buildBreakdownRows(b: FeeBreakdown, excluded: Set<ExcludableFee>
 }
 
 /** Plain-text "Selling price − Cost price − Referral fee = Net profit" reading of the breakdown. */
-export function buildFormulaText(b: FeeBreakdown, excluded: Set<ExcludableFee>): string {
-  const terms = buildBreakdownRows(b, excluded).filter((r) => !r.isSummary && !r.isExcluded);
+export function buildFormulaText(b: FeeBreakdown, excluded: Set<ExcludableFee>, labels: BreakdownLabels): string {
+  const terms = buildBreakdownRows(b, excluded, labels).filter((r) => !r.isSummary && !r.isExcluded);
 
   const chain = terms
     .map((r, i) => {

@@ -351,7 +351,7 @@ function runAndShowResult(): void {
     };
 
     const result = solveForPrice(config, solverOpts);
-    renderSolverResult(resultBody, result);
+    renderSolverResult(resultBody, result, config);
 
     const debugTrace: DebugTrace = lastEbayCostResult
       ? { fees: result.trace.feeTrace, solver: result.trace, ebayCost: lastEbayCostResult }
@@ -370,7 +370,7 @@ function runAndShowResult(): void {
     el('step-4-warning').style.display = 'none';
 
     const { breakdown, trace: feeTrace } = calculateFeesWithTrace(config, { ...buildBaseOptions(), sellingPrice });
-    renderBreakdown(resultBody, breakdown);
+    renderBreakdown(resultBody, breakdown, config);
 
     const debugTrace: DebugTrace = lastEbayCostResult
       ? { fees: feeTrace, ebayCost: lastEbayCostResult }

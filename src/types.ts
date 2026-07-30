@@ -41,6 +41,14 @@ export interface MarketplaceConfig {
   paymentFee: PaymentFee;
   vatOnFees: boolean;                   // does the marketplace charge VAT on its fees?
   fulfilmentModes: FulfilmentMode[];
+
+  /** Display label overrides for the breakdown table / formula trace, since
+   * marketplaces use different names for the same kind of fee (e.g. eBay's
+   * "Final Value Fee" vs the generic "Referral fee"). Default to "Referral
+   * fee" / "Payment fee" (breakdown) and "Payment processing fee" (trace)
+   * when omitted. */
+  referralFeeLabel?: string;
+  paymentFeeLabel?: string;
 }
 
 // ---------------------------------------------------------------------------

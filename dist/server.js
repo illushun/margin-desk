@@ -23,7 +23,9 @@ var ebay = {
   vatOnFees: true,
   fulfilmentModes: [
     { id: "self", label: "Self-fulfilled", fee: 0 }
-  ]
+  ],
+  referralFeeLabel: "eBay Final Value Fee",
+  paymentFeeLabel: "eBay flat fee"
 };
 var ebay_default = ebay;
 
@@ -219,10 +221,12 @@ function calculateFeesWithTrace(config, options) {
   const referralFormula = referral.minimum > 0 && referral.fee === referral.minimum ? `${sellingPrice} \xD7 ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} \u2192 minimum applies` : `${sellingPrice} \xD7 ${referral.rate}`;
   const paymentFormula = paymentFeeConfig.fixed > 0 ? `${sellingPrice} \xD7 ${paymentFeeConfig.percentage} + ${paymentFeeConfig.fixed}` : `${sellingPrice} \xD7 ${paymentFeeConfig.percentage}`;
   const vatFormula = !config.vatOnFees ? "not applicable for this marketplace" : !vatRegistered ? "not applicable (not VAT registered)" : `${marketplaceFeeSubtotal} \xD7 ${vatRate}`;
+  const referralLabel = config.referralFeeLabel ?? "Referral fee";
+  const paymentLabel = config.paymentFeeLabel ?? "Payment processing fee";
   const formulas = [
-    { label: "Referral fee", formula: referralFormula, amount: referral.fee, excluded: excludedFees.has("referralFee") },
+    { label: referralLabel, formula: referralFormula, amount: referral.fee, excluded: excludedFees.has("referralFee") },
     { label: "Closing fee", formula: "fixed per item", amount: closingFee },
-    { label: "Payment processing fee", formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has("paymentFee") },
+    { label: paymentLabel, formula: paymentFormula, amount: rawPaymentFee, excluded: excludedFees.has("paymentFee") },
     { label: "Fulfilment fee", formula: "weight/mode lookup", amount: rawFulfilmentFee, excluded: excludedFees.has("fulfilmentFee") },
     { label: "Shipping cost", formula: "entered amount", amount: rawShippingCost, excluded: excludedFees.has("shippingCost") },
     { label: "VAT on fees", formula: vatFormula, amount: rawVatOnFees, excluded: excludedFees.has("vatOnFees") },
@@ -370,14 +374,16 @@ function formatGBP(pence) {
 }
 
 // src/engine/breakdown-text.ts
-function buildBreakdownRows(b, excluded) {
+function buildBreakdownRows(b, excluded, labels) {
+  const referralLabel = labels.referralFeeLabel ?? "Referral fee";
+  const paymentLabel = labels.paymentFeeLabel ?? "Payment fee";
   const rows = [
     { label: "Selling price", amount: b.sellingPrice },
     { label: "Cost price", amount: b.costPrice, isDeduction: true },
-    { label: "Referral fee", amount: b.referralFee, isDeduction: true, isExcluded: excluded.has("referralFee") }
+    { label: referralLabel, amount: b.referralFee, isDeduction: true, isExcluded: excluded.has("referralFee") }
   ];
   if (b.closingFee > 0) rows.push({ label: "Closing fee", amount: b.closingFee, isDeduction: true });
-  rows.push({ label: "Payment fee", amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has("paymentFee") });
+  rows.push({ label: paymentLabel, amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has("paymentFee") });
   if (b.fulfilmentFee > 0 || excluded.has("fulfilmentFee")) {
     rows.push({ label: "Fulfilment fee", amount: b.fulfilmentFee, isDeduction: true, isExcluded: excluded.has("fulfilmentFee") });
   }
@@ -393,8 +399,8 @@ function buildBreakdownRows(b, excluded) {
   rows.push({ label: "Total deductions", amount: b.totalFees + b.costPrice, isSummary: true });
   return rows;
 }
-function buildFormulaText(b, excluded) {
-  const terms = buildBreakdownRows(b, excluded).filter((r) => !r.isSummary && !r.isExcluded);
+function buildFormulaText(b, excluded, labels) {
+  const terms = buildBreakdownRows(b, excluded, labels).filter((r) => !r.isSummary && !r.isExcluded);
   const chain = terms.map((r, i) => {
     const amt = formatGBP(r.amount);
     if (i === 0) return `${r.label} (${amt})`;
@@ -770,10 +776,10 @@ function handleCalculate(body, withTrace) {
   };
   if (withTrace) {
     const { breakdown: breakdown2, trace } = calculateFeesWithTrace(config, options);
-    return { breakdown: breakdown2, trace, formulaText: buildFormulaText(breakdown2, options.excludedFees) };
+    return { breakdown: breakdown2, trace, formulaText: buildFormulaText(breakdown2, options.excludedFees, config) };
   }
   const breakdown = calculateFees(config, options);
-  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees) };
+  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees, config) };
 }
 var VALID_TARGET_MODES = ["fixed", "margin"];
 function handleSolve(body) {
@@ -790,7 +796,7 @@ function handleSolve(body) {
     targetMargin: optionalNumber(body, "targetMargin", 0)
   };
   const result = solveForPrice(config, options);
-  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees) };
+  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees, config) };
 }
 function handleEbayCost(body) {
   if (!isRecord(body)) throw new ApiError(400, "Request body must be a JSON object");

@@ -32,6 +32,9 @@ const ebay: MarketplaceConfig = {
   fulfilmentModes: [
     { id: 'self', label: 'Self-fulfilled', fee: 0 },
   ],
+
+  referralFeeLabel: 'eBay Final Value Fee',
+  paymentFeeLabel: 'eBay flat fee',
 };
 
 export default ebay;

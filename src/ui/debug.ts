@@ -67,6 +67,7 @@ function renderEbayCostTrace(t: EbayCostBuilderResult): string {
 const FEE_TRACE_HIDE_IF_ZERO = new Set([
   'Closing fee',
   'Payment processing fee',
+  'eBay flat fee', // marketplace-specific override of "Payment processing fee", see MarketplaceConfig.paymentFeeLabel
   'Fulfilment fee',
   'Shipping cost',
   'VAT on fees',
