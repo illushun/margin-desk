@@ -1131,17 +1131,36 @@
       <div id="ebay-fees-group" style="display:none;">
         <div class="field-row">
           <div class="field-group">
-            <label for="ebay-vat-amount">VAT on selling price (£)</label>
-            <input type="number" id="ebay-vat-amount" min="0" step="0.01" placeholder="4.00" value="0" />
+            <label for="ebay-vat-mode">VAT on selling price</label>
+            <select id="ebay-vat-mode">
+              <option value="fixed">Fixed amount (£)</option>
+              <option value="rate">Rate (%)</option>
+            </select>
           </div>
           <div class="field-group">
-            <label for="ebay-listing-fee">Listing fee (£)</label>
-            <input type="number" id="ebay-listing-fee" min="0" step="0.01" placeholder="0.35" value="0" />
+            <label for="ebay-vat-value" id="ebay-vat-value-label">Amount (£)</label>
+            <input type="number" id="ebay-vat-value" min="0" step="0.01" placeholder="4.00" value="0" />
           </div>
         </div>
+        <button type="button" id="ebay-vat-preset-btn" class="btn-ghost" style="margin-bottom:0.75rem;">Use 20% VAT-inclusive rate (16.67%)</button>
+
         <div class="field-group">
-          <label for="ebay-ad-cost">Ad / promoted listings (£)</label>
-          <input type="number" id="ebay-ad-cost" min="0" step="0.01" placeholder="0.50" value="0" />
+          <label for="ebay-listing-fee">Listing fee (£)</label>
+          <input type="number" id="ebay-listing-fee" min="0" step="0.01" placeholder="0.35" value="0" />
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label for="ebay-ad-mode">Ad / promoted listings</label>
+            <select id="ebay-ad-mode">
+              <option value="fixed">Fixed amount (£)</option>
+              <option value="rate">Rate (%)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ebay-ad-value" id="ebay-ad-value-label">Amount (£)</label>
+            <input type="number" id="ebay-ad-value" min="0" step="0.01" placeholder="0.50" value="0" />
+          </div>
         </div>
       </div>
 

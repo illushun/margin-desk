@@ -8,7 +8,7 @@ import { buildEbayCost } from '../marketplaces/ebay-cost-builder';
 import { icons } from './icons';
 import type {
   CustomFee, CalculationOptions, SolverOptions,
-  SolverTargetMode, ExcludableFee, DebugTrace, EbayCostBuilderResult,
+  SolverTargetMode, ExcludableFee, DebugTrace, EbayCostBuilderResult, EbayFeeInput,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -163,6 +163,25 @@ function applyMarketplaceContext(): void {
 // eBay cost builder
 // ---------------------------------------------------------------------------
 
+/** Read a fixed-£/rate-% pair (VAT on selling price, ad cost) into an EbayFeeInput. */
+function readEbayFeeInput(modeId: string, valueId: string): EbayFeeInput {
+  const mode = el<HTMLSelectElement>(modeId).value;
+  const raw = el<HTMLInputElement>(valueId).value;
+  return mode === 'rate'
+    ? { mode: 'rate', rate: percentageToRate(raw) }
+    : { mode: 'fixed', amount: poundsToPence(raw) };
+}
+
+/** Toggle the value input's label/placeholder to match fixed-£ vs rate-% mode. */
+function updateEbayFeeInputLabel(
+  modeId: string, valueLabelId: string, valueInputId: string,
+  fixedPlaceholder: string, ratePlaceholder: string,
+): void {
+  const mode = el<HTMLSelectElement>(modeId).value;
+  el(valueLabelId).textContent = mode === 'rate' ? 'Rate (%)' : 'Amount (£)';
+  el<HTMLInputElement>(valueInputId).placeholder = mode === 'rate' ? ratePlaceholder : fixedPlaceholder;
+}
+
 function applyEbayCostBuilder(): EbayCostBuilderResult {
   const ppIncluded = el<HTMLInputElement>('ebay-pp-included').checked;
 
@@ -174,9 +193,9 @@ function applyEbayCostBuilder(): EbayCostBuilderResult {
     packingMaterials:  poundsToPence(el<HTMLInputElement>('ebay-packing-materials').value),
     ppCost:            poundsToPence(el<HTMLInputElement>('ebay-pp-cost').value),
     ppIncludedInPrice: ppIncluded,
-    vatOnSellingPrice: poundsToPence(el<HTMLInputElement>('ebay-vat-amount').value),
+    vatOnSellingPrice: readEbayFeeInput('ebay-vat-mode', 'ebay-vat-value'),
     listingFee:        poundsToPence(el<HTMLInputElement>('ebay-listing-fee').value),
-    adCost:            poundsToPence(el<HTMLInputElement>('ebay-ad-cost').value),
+    adCost:            readEbayFeeInput('ebay-ad-mode', 'ebay-ad-value'),
   });
 
   el<HTMLInputElement>('cost-price-ebay').value    = String(result.costPrice);
@@ -280,7 +299,9 @@ function buildBaseOptions(): Omit<CalculationOptions, 'sellingPrice'> {
     vatRate: 0.20,
     fulfilmentModeId: el<HTMLSelectElement>('fulfilment-mode').value,
     shippingCost,
-    customFees,
+    customFees: lastEbayCostResult
+      ? [...customFees, ...lastEbayCostResult.generatedCustomFees]
+      : customFees,
     excludedFees: readExcludedFees(),
   };
   if (!isNaN(weightRaw)) opts.weightGrams = weightRaw;
@@ -519,6 +540,17 @@ document.addEventListener('DOMContentLoaded', () => {
   el('mode-calculate').addEventListener('click', () => setMode('calculate'));
   el('mode-solve').addEventListener('click', () => setMode('solve'));
   el('target-mode').addEventListener('change', updateTargetInputLabel);
+
+  // eBay VAT / ad cost fixed-vs-rate toggles
+  el('ebay-vat-mode').addEventListener('change', () =>
+    updateEbayFeeInputLabel('ebay-vat-mode', 'ebay-vat-value-label', 'ebay-vat-value', '4.00', '16.67'));
+  el('ebay-ad-mode').addEventListener('change', () =>
+    updateEbayFeeInputLabel('ebay-ad-mode', 'ebay-ad-value-label', 'ebay-ad-value', '0.50', '5'));
+  el('ebay-vat-preset-btn').addEventListener('click', () => {
+    el<HTMLSelectElement>('ebay-vat-mode').value = 'rate';
+    el<HTMLInputElement>('ebay-vat-value').value = ((1 - 1 / 1.2) * 100).toFixed(4);
+    updateEbayFeeInputLabel('ebay-vat-mode', 'ebay-vat-value-label', 'ebay-vat-value', '4.00', '16.67');
+  });
 
   // Custom fees
   el('add-fee-btn').addEventListener('click', addCustomFee);

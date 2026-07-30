@@ -10,15 +10,15 @@ var ebay = {
   name: "eBay UK",
   currency: "GBP",
   referralFees: [
-    { rate: 0.119 }
-    // 11.9% -- catch-all (no upTo)
+    { rate: 0.129 }
+    // 12.9% -- catch-all (no upTo)
   ],
   closingFee: 0,
   paymentFee: {
-    percentage: 3e-3,
-    // 0.3%
-    fixed: 30
-    // 30p
+    percentage: 0,
+    // payment processing is bundled into the referral rate above
+    fixed: 36
+    // £0.36 flat per item
   },
   vatOnFees: true,
   fulfilmentModes: [
@@ -123,7 +123,10 @@ function calcVatOnFees(feeSubtotal, vatRate, marketplaceChargesVat, sellerIsVatR
 }
 
 // src/engine/fees.ts
-function calcReferralFee(sellingPrice, config) {
+function calcReferralFee(sellingPrice, config, rateOverride) {
+  if (rateOverride !== void 0) {
+    return { fee: roundPence(sellingPrice * rateOverride), rate: rateOverride, minimum: 0 };
+  }
   const tier = config.referralFees.find(
     (t) => t.upTo === void 0 || sellingPrice <= t.upTo
   );
@@ -160,11 +163,12 @@ function calculateFees(config, options) {
 }
 function calculateFeesWithTrace(config, options) {
   const { sellingPrice, costPrice, vatRegistered, vatRate, excludedFees } = options;
-  const referral = calcReferralFee(sellingPrice, config);
+  const referral = calcReferralFee(sellingPrice, config, options.referralRateOverride);
   const referralFee = excludedFees.has("referralFee") ? 0 : referral.fee;
   const closingFee = config.closingFee;
+  const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
   const rawPaymentFee = roundPence(
-    sellingPrice * config.paymentFee.percentage + config.paymentFee.fixed
+    sellingPrice * paymentFeeConfig.percentage + paymentFeeConfig.fixed
   );
   const paymentFee = excludedFees.has("paymentFee") ? 0 : rawPaymentFee;
   const rawFulfilmentFee = calcFulfilmentFee(config, options.fulfilmentModeId, options.weightGrams);
@@ -213,7 +217,7 @@ function calculateFeesWithTrace(config, options) {
   });
   const totalDeductions = totalFees + costPrice;
   const referralFormula = referral.minimum > 0 && referral.fee === referral.minimum ? `${sellingPrice} \xD7 ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} \u2192 minimum applies` : `${sellingPrice} \xD7 ${referral.rate}`;
-  const paymentFormula = config.paymentFee.fixed > 0 ? `${sellingPrice} \xD7 ${config.paymentFee.percentage} + ${config.paymentFee.fixed}` : `${sellingPrice} \xD7 ${config.paymentFee.percentage}`;
+  const paymentFormula = paymentFeeConfig.fixed > 0 ? `${sellingPrice} \xD7 ${paymentFeeConfig.percentage} + ${paymentFeeConfig.fixed}` : `${sellingPrice} \xD7 ${paymentFeeConfig.percentage}`;
   const vatFormula = !config.vatOnFees ? "not applicable for this marketplace" : !vatRegistered ? "not applicable (not VAT registered)" : `${marketplaceFeeSubtotal} \xD7 ${vatRate}`;
   const formulas = [
     { label: "Referral fee", formula: referralFormula, amount: referral.fee, excluded: excludedFees.has("referralFee") },
@@ -233,8 +237,8 @@ function calculateFeesWithTrace(config, options) {
     referralFee: referral.fee,
     referralExcluded: excludedFees.has("referralFee"),
     closingFee,
-    paymentPercentage: config.paymentFee.percentage,
-    paymentFixed: config.paymentFee.fixed,
+    paymentPercentage: paymentFeeConfig.percentage,
+    paymentFixed: paymentFeeConfig.fixed,
     paymentFee: rawPaymentFee,
     paymentExcluded: excludedFees.has("paymentFee"),
     fulfilmentFee: rawFulfilmentFee,
@@ -260,9 +264,10 @@ var CONVERGENCE_THRESHOLD = 1;
 var MAX_RATCHET_STEPS = 20;
 function estimateSellingPrice(config, options) {
   const { costPrice, shippingCost, excludedFees } = options;
-  const referralRate = excludedFees.has("referralFee") ? 0 : config.referralFees[0]?.rate ?? 0;
-  const paymentRate = excludedFees.has("paymentFee") ? 0 : config.paymentFee.percentage;
-  const paymentFixed = excludedFees.has("paymentFee") ? 0 : config.paymentFee.fixed;
+  const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
+  const referralRate = excludedFees.has("referralFee") ? 0 : options.referralRateOverride ?? config.referralFees[0]?.rate ?? 0;
+  const paymentRate = excludedFees.has("paymentFee") ? 0 : paymentFeeConfig.percentage;
+  const paymentFixed = excludedFees.has("paymentFee") ? 0 : paymentFeeConfig.fixed;
   const shipping = excludedFees.has("shippingCost") ? 0 : shippingCost;
   const percentageOfSaleCustomRates = options.customFees.filter((f) => f.type === "percentage_of_sale").reduce((sum, f) => sum + f.value, 0);
   const fixedCustomFees = options.customFees.filter((f) => f.type === "fixed_per_item").reduce((sum, f) => sum + f.value, 0);
@@ -372,10 +377,39 @@ function buildEbayCost(inputs) {
   } = inputs;
   const safeUom = uom <= 0 ? 1 : uom;
   const unitCost = roundPence(costPerBatch / safeUom * qtyRequired * (1 - discountRate));
+  const vatFixedAmount = vatOnSellingPrice.mode === "fixed" ? vatOnSellingPrice.amount : 0;
+  const adFixedAmount = adCost.mode === "fixed" ? adCost.amount : 0;
   const costPrice = roundPence(
-    unitCost + packingMaterials + (ppIncludedInPrice ? ppCost : 0) + vatOnSellingPrice + listingFee + adCost
+    unitCost + packingMaterials + (ppIncludedInPrice ? ppCost : 0) + vatFixedAmount + listingFee + adFixedAmount
   );
   const shippingCost = ppIncludedInPrice ? 0 : ppCost;
+  const generatedCustomFees = [];
+  if (vatOnSellingPrice.mode === "rate") {
+    generatedCustomFees.push({
+      id: "ebay-vat-slice",
+      label: "VAT on selling price",
+      type: "percentage_of_sale",
+      value: vatOnSellingPrice.rate
+    });
+  }
+  if (adCost.mode === "rate") {
+    generatedCustomFees.push({
+      id: "ebay-ad-cost-rate",
+      label: "Ad / promoted listings",
+      type: "percentage_of_sale",
+      value: adCost.rate
+    });
+  }
+  const vatFormula = vatOnSellingPrice.mode === "fixed" ? { label: "VAT on selling price", formula: "entered amount", amount: vatFixedAmount } : {
+    label: "VAT on selling price",
+    formula: `${(vatOnSellingPrice.rate * 100).toFixed(2)}% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation`,
+    amount: 0
+  };
+  const adFormula = adCost.mode === "fixed" ? { label: "Ad / promoted listings cost", formula: "fixed amount", amount: adFixedAmount } : {
+    label: "Ad / promoted listings cost",
+    formula: `${(adCost.rate * 100).toFixed(2)}% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation`,
+    amount: 0
+  };
   const formulas = [
     {
       label: "Unit cost",
@@ -392,24 +426,16 @@ function buildEbayCost(inputs) {
       formula: ppIncludedInPrice ? "added to cost price" : "excluded from cost price, returned as shippingCost instead",
       amount: ppCost
     },
-    {
-      label: "VAT on selling price",
-      formula: "entered amount",
-      amount: vatOnSellingPrice
-    },
+    vatFormula,
     {
       label: "Listing fee",
       formula: "fixed per listing",
       amount: listingFee
     },
-    {
-      label: "Ad / promoted listings cost",
-      formula: "fixed amount",
-      amount: adCost
-    },
+    adFormula,
     {
       label: "Cost price",
-      formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
+      formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatFixedAmount} + ${listingFee} + ${adFixedAmount}`,
       amount: costPrice
     },
     {
@@ -418,7 +444,7 @@ function buildEbayCost(inputs) {
       amount: shippingCost
     }
   ];
-  return { costPrice, shippingCost, unitCost, formulas };
+  return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas };
 }
 
 // src/api/server.ts
@@ -475,6 +501,19 @@ function optionalNumber(body, key, fallback) {
   if (body[key] === void 0) return fallback;
   return requireNumber(body, key);
 }
+function optionalNumberOrUndefined(body, key) {
+  if (body[key] === void 0) return void 0;
+  return requireNumber(body, key);
+}
+function parsePaymentFeeOverride(body) {
+  const raw = body.paymentFeeOverride;
+  if (raw === void 0) return void 0;
+  if (!isRecord(raw)) throw new ApiError(400, '"paymentFeeOverride" must be an object like { "percentage": 0, "fixed": 36 }');
+  return {
+    percentage: requireNumber(raw, "percentage"),
+    fixed: requireNumber(raw, "fixed")
+  };
+}
 function requireString(body, key) {
   const value = body[key];
   if (typeof value !== "string" || value.length === 0) {
@@ -516,6 +555,8 @@ function parseCustomFees(body) {
   });
 }
 function parseCommonOptions(body) {
+  const referralRateOverride = optionalNumberOrUndefined(body, "referralRateOverride");
+  const paymentFeeOverride = parsePaymentFeeOverride(body);
   return {
     costPrice: requireNumber(body, "costPrice"),
     vatRegistered: body.vatRegistered === true,
@@ -523,9 +564,21 @@ function parseCommonOptions(body) {
     fulfilmentModeId: requireString(body, "fulfilmentModeId"),
     shippingCost: optionalNumber(body, "shippingCost", 0),
     ...typeof body.weightGrams === "number" ? { weightGrams: body.weightGrams } : {},
+    ...referralRateOverride !== void 0 ? { referralRateOverride } : {},
+    ...paymentFeeOverride !== void 0 ? { paymentFeeOverride } : {},
     customFees: parseCustomFees(body),
     excludedFees: parseExcludedFees(body)
   };
+}
+function parseEbayFeeInput(body, key) {
+  const raw = body[key];
+  if (raw === void 0) return { mode: "fixed", amount: 0 };
+  if (!isRecord(raw)) {
+    throw new ApiError(400, `"${key}" must be an object like { "mode": "fixed", "amount": 0 } or { "mode": "rate", "rate": 0 }`);
+  }
+  if (raw.mode === "rate") return { mode: "rate", rate: requireNumber(raw, "rate") };
+  if (raw.mode === "fixed") return { mode: "fixed", amount: requireNumber(raw, "amount") };
+  throw new ApiError(400, `"${key}.mode" must be "fixed" or "rate"`);
 }
 function resolveMarketplace(body) {
   const id = requireString(body, "marketplaceId");
@@ -577,9 +630,9 @@ function handleEbayCost(body) {
     packingMaterials: optionalNumber(body, "packingMaterials", 0),
     ppCost: optionalNumber(body, "ppCost", 0),
     ppIncludedInPrice: body.ppIncludedInPrice === true,
-    vatOnSellingPrice: optionalNumber(body, "vatOnSellingPrice", 0),
+    vatOnSellingPrice: parseEbayFeeInput(body, "vatOnSellingPrice"),
     listingFee: optionalNumber(body, "listingFee", 0),
-    adCost: optionalNumber(body, "adCost", 0)
+    adCost: parseEbayFeeInput(body, "adCost")
   });
 }
 async function router(req, res) {

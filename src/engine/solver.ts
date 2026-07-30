@@ -27,9 +27,10 @@ function estimateSellingPrice(
 ): { estimate: number; formula: string } {
   const { costPrice, shippingCost, excludedFees } = options;
 
-  const referralRate  = excludedFees.has('referralFee') ? 0 : (config.referralFees[0]?.rate ?? 0);
-  const paymentRate   = excludedFees.has('paymentFee')  ? 0 : config.paymentFee.percentage;
-  const paymentFixed  = excludedFees.has('paymentFee')  ? 0 : config.paymentFee.fixed;
+  const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
+  const referralRate  = excludedFees.has('referralFee') ? 0 : (options.referralRateOverride ?? config.referralFees[0]?.rate ?? 0);
+  const paymentRate   = excludedFees.has('paymentFee')  ? 0 : paymentFeeConfig.percentage;
+  const paymentFixed  = excludedFees.has('paymentFee')  ? 0 : paymentFeeConfig.fixed;
   const shipping      = excludedFees.has('shippingCost') ? 0 : shippingCost;
 
   const percentageOfSaleCustomRates = options.customFees

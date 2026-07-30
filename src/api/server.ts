@@ -10,6 +10,8 @@ import type {
   CustomFee,
   ExcludableFee,
   SolverTargetMode,
+  EbayFeeInput,
+  PaymentFee,
 } from '../types';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -86,6 +88,22 @@ function optionalNumber(body: Record<string, unknown>, key: string, fallback: nu
   return requireNumber(body, key);
 }
 
+function optionalNumberOrUndefined(body: Record<string, unknown>, key: string): number | undefined {
+  if (body[key] === undefined) return undefined;
+  return requireNumber(body, key);
+}
+
+/** { "percentage": 0, "fixed": 36 } -- overrides a marketplace's configured payment fee for one calculation. */
+function parsePaymentFeeOverride(body: Record<string, unknown>): PaymentFee | undefined {
+  const raw = body.paymentFeeOverride;
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw new ApiError(400, '"paymentFeeOverride" must be an object like { "percentage": 0, "fixed": 36 }');
+  return {
+    percentage: requireNumber(raw, 'percentage'),
+    fixed: requireNumber(raw, 'fixed'),
+  };
+}
+
 function requireString(body: Record<string, unknown>, key: string): string {
   const value = body[key];
   if (typeof value !== 'string' || value.length === 0) {
@@ -133,6 +151,9 @@ function parseCustomFees(body: Record<string, unknown>): CustomFee[] {
 
 /** Shared fields between /calculate and /solve, everything except sellingPrice. */
 function parseCommonOptions(body: Record<string, unknown>): Omit<CalculationOptions, 'sellingPrice'> {
+  const referralRateOverride = optionalNumberOrUndefined(body, 'referralRateOverride');
+  const paymentFeeOverride = parsePaymentFeeOverride(body);
+
   return {
     costPrice: requireNumber(body, 'costPrice'),
     vatRegistered: body.vatRegistered === true,
@@ -140,9 +161,27 @@ function parseCommonOptions(body: Record<string, unknown>): Omit<CalculationOpti
     fulfilmentModeId: requireString(body, 'fulfilmentModeId'),
     shippingCost: optionalNumber(body, 'shippingCost', 0),
     ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+    ...(referralRateOverride !== undefined ? { referralRateOverride } : {}),
+    ...(paymentFeeOverride !== undefined ? { paymentFeeOverride } : {}),
     customFees: parseCustomFees(body),
     excludedFees: parseExcludedFees(body),
   };
+}
+
+/**
+ * VAT on selling price / ad cost in the eBay cost builder are either a fixed
+ * pence amount or a rate applied to the (not-yet-known) selling price.
+ * Defaults to a zero fixed amount when the field is omitted.
+ */
+function parseEbayFeeInput(body: Record<string, unknown>, key: string): EbayFeeInput {
+  const raw = body[key];
+  if (raw === undefined) return { mode: 'fixed', amount: 0 };
+  if (!isRecord(raw)) {
+    throw new ApiError(400, `"${key}" must be an object like { "mode": "fixed", "amount": 0 } or { "mode": "rate", "rate": 0 }`);
+  }
+  if (raw.mode === 'rate') return { mode: 'rate', rate: requireNumber(raw, 'rate') };
+  if (raw.mode === 'fixed') return { mode: 'fixed', amount: requireNumber(raw, 'amount') };
+  throw new ApiError(400, `"${key}.mode" must be "fixed" or "rate"`);
 }
 
 function resolveMarketplace(body: Record<string, unknown>) {
@@ -209,9 +248,9 @@ function handleEbayCost(body: unknown) {
     packingMaterials: optionalNumber(body, 'packingMaterials', 0),
     ppCost: optionalNumber(body, 'ppCost', 0),
     ppIncludedInPrice: body.ppIncludedInPrice === true,
-    vatOnSellingPrice: optionalNumber(body, 'vatOnSellingPrice', 0),
+    vatOnSellingPrice: parseEbayFeeInput(body, 'vatOnSellingPrice'),
     listingFee: optionalNumber(body, 'listingFee', 0),
-    adCost: optionalNumber(body, 'adCost', 0),
+    adCost: parseEbayFeeInput(body, 'adCost'),
   });
 }
 

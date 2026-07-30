@@ -80,6 +80,10 @@ export interface CalculationOptions {
   weightGrams?: number;       // required when fulfilment mode uses weight bands
   customFees: CustomFee[];
   excludedFees: Set<ExcludableFee>;
+  /** Overrides the marketplace config's referralFees tiers with a single flat rate for this calculation only. */
+  referralRateOverride?: number;
+  /** Overrides the marketplace config's paymentFee for this calculation only. */
+  paymentFeeOverride?: PaymentFee;
 }
 
 export type SolverTargetMode = 'fixed' | 'margin';
@@ -139,6 +143,18 @@ export interface FormulaLine {
   excluded?: boolean;  // true if this line was zeroed out by CalculationOptions.excludedFees
 }
 
+/**
+ * VAT on selling price and ad/promoted-listings cost are either a fixed amount
+ * the seller already knows, or a rate applied to whatever the selling price
+ * turns out to be. A rate can't be pre-calculated into a pence amount before
+ * the price is known -- that's a circular dependency when solving for price --
+ * so rate mode is threaded through as a CustomFee (percentage_of_sale) instead
+ * of being folded into costPrice. See EbayCostBuilderResult.generatedCustomFees.
+ */
+export type EbayFeeInput =
+  | { mode: 'fixed'; amount: number } // pence
+  | { mode: 'rate'; rate: number };   // decimal e.g. 0.1667 for 16.67%
+
 export interface EbayCostBuilderInputs {
   costPerBatch: number;       // supplier price in pence (for the whole UoM batch)
   uom: number;                // units per batch e.g. 12 if supplier sells packs of 12
@@ -147,15 +163,16 @@ export interface EbayCostBuilderInputs {
   packingMaterials: number;   // pence per item
   ppCost: number;             // actual postage + packing cost in pence
   ppIncludedInPrice: boolean; // true = bundle P+P into item price, false = charge separately
-  vatOnSellingPrice: number;  // VAT amount in pence the seller expects to remit on this item
-  listingFee: number;         // eBay fixed listing fee in pence
-  adCost: number;             // promoted listings fixed cost in pence
+  vatOnSellingPrice: EbayFeeInput; // VAT the seller expects to remit on this item
+  listingFee: number;         // eBay fixed listing fee in pence -- always a flat charge
+  adCost: EbayFeeInput;       // promoted listings cost
 }
 
 export interface EbayCostBuilderResult {
   costPrice: number;          // feeds into CalculationOptions.costPrice
   shippingCost: number;       // feeds into CalculationOptions.shippingCost
   unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
+  generatedCustomFees: CustomFee[]; // rate-mode VAT/ad cost, to merge into CalculationOptions.customFees
   formulas: FormulaLine[]; // line-by-line working, so callers can show it without reimplementing the maths
 }
 

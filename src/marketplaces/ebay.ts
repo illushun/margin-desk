@@ -3,11 +3,13 @@ import type { MarketplaceConfig } from '../types';
 /**
  * eBay UK fee structure.
  *
- * Referral fee: 11.9% on most categories. No closing fee for most listings.
- * Payment processing: 0.3% + 30p (Managed Payments, as of 2024).
- * VAT on fees: charged at 20% for VAT-registered sellers.
+ * Combined selling fee: 12.9% of selling price + £0.36 flat per item (payment
+ * processing is bundled into this combined rate, not charged separately).
+ * No closing fee for most listings. VAT on fees: charged at 20% for
+ * VAT-registered sellers.
  *
- * Source: https://www.ebay.co.uk/help/selling/fees-credits-invoices/selling-fees
+ * Callers can override this per calculation via CalculationOptions.referralRateOverride
+ * / paymentFeeOverride when a seller's actual rate differs (category, subscription tier).
  */
 const ebay: MarketplaceConfig = {
   id: 'ebay-uk',
@@ -15,14 +17,14 @@ const ebay: MarketplaceConfig = {
   currency: 'GBP',
 
   referralFees: [
-    { rate: 0.119 }, // 11.9% -- catch-all (no upTo)
+    { rate: 0.129 }, // 12.9% -- catch-all (no upTo)
   ],
 
   closingFee: 0,
 
   paymentFee: {
-    percentage: 0.003, // 0.3%
-    fixed: 30,         // 30p
+    percentage: 0,  // payment processing is bundled into the referral rate above
+    fixed: 36,      // £0.36 flat per item
   },
 
   vatOnFees: true,

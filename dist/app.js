@@ -6,15 +6,15 @@
     name: "eBay UK",
     currency: "GBP",
     referralFees: [
-      { rate: 0.119 }
-      // 11.9% -- catch-all (no upTo)
+      { rate: 0.129 }
+      // 12.9% -- catch-all (no upTo)
     ],
     closingFee: 0,
     paymentFee: {
-      percentage: 3e-3,
-      // 0.3%
-      fixed: 30
-      // 30p
+      percentage: 0,
+      // payment processing is bundled into the referral rate above
+      fixed: 36
+      // £0.36 flat per item
     },
     vatOnFees: true,
     fulfilmentModes: [
@@ -119,7 +119,10 @@
   }
 
   // src/engine/fees.ts
-  function calcReferralFee(sellingPrice, config) {
+  function calcReferralFee(sellingPrice, config, rateOverride) {
+    if (rateOverride !== void 0) {
+      return { fee: roundPence(sellingPrice * rateOverride), rate: rateOverride, minimum: 0 };
+    }
     const tier = config.referralFees.find(
       (t) => t.upTo === void 0 || sellingPrice <= t.upTo
     );
@@ -156,11 +159,12 @@
   }
   function calculateFeesWithTrace(config, options) {
     const { sellingPrice, costPrice, vatRegistered, vatRate, excludedFees } = options;
-    const referral = calcReferralFee(sellingPrice, config);
+    const referral = calcReferralFee(sellingPrice, config, options.referralRateOverride);
     const referralFee = excludedFees.has("referralFee") ? 0 : referral.fee;
     const closingFee = config.closingFee;
+    const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
     const rawPaymentFee = roundPence(
-      sellingPrice * config.paymentFee.percentage + config.paymentFee.fixed
+      sellingPrice * paymentFeeConfig.percentage + paymentFeeConfig.fixed
     );
     const paymentFee = excludedFees.has("paymentFee") ? 0 : rawPaymentFee;
     const rawFulfilmentFee = calcFulfilmentFee(config, options.fulfilmentModeId, options.weightGrams);
@@ -209,7 +213,7 @@
     });
     const totalDeductions = totalFees + costPrice;
     const referralFormula = referral.minimum > 0 && referral.fee === referral.minimum ? `${sellingPrice} \xD7 ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} \u2192 minimum applies` : `${sellingPrice} \xD7 ${referral.rate}`;
-    const paymentFormula = config.paymentFee.fixed > 0 ? `${sellingPrice} \xD7 ${config.paymentFee.percentage} + ${config.paymentFee.fixed}` : `${sellingPrice} \xD7 ${config.paymentFee.percentage}`;
+    const paymentFormula = paymentFeeConfig.fixed > 0 ? `${sellingPrice} \xD7 ${paymentFeeConfig.percentage} + ${paymentFeeConfig.fixed}` : `${sellingPrice} \xD7 ${paymentFeeConfig.percentage}`;
     const vatFormula = !config.vatOnFees ? "not applicable for this marketplace" : !vatRegistered ? "not applicable (not VAT registered)" : `${marketplaceFeeSubtotal} \xD7 ${vatRate}`;
     const formulas = [
       { label: "Referral fee", formula: referralFormula, amount: referral.fee, excluded: excludedFees.has("referralFee") },
@@ -229,8 +233,8 @@
       referralFee: referral.fee,
       referralExcluded: excludedFees.has("referralFee"),
       closingFee,
-      paymentPercentage: config.paymentFee.percentage,
-      paymentFixed: config.paymentFee.fixed,
+      paymentPercentage: paymentFeeConfig.percentage,
+      paymentFixed: paymentFeeConfig.fixed,
       paymentFee: rawPaymentFee,
       paymentExcluded: excludedFees.has("paymentFee"),
       fulfilmentFee: rawFulfilmentFee,
@@ -256,9 +260,10 @@
   var MAX_RATCHET_STEPS = 20;
   function estimateSellingPrice(config, options) {
     const { costPrice, shippingCost, excludedFees } = options;
-    const referralRate = excludedFees.has("referralFee") ? 0 : config.referralFees[0]?.rate ?? 0;
-    const paymentRate = excludedFees.has("paymentFee") ? 0 : config.paymentFee.percentage;
-    const paymentFixed = excludedFees.has("paymentFee") ? 0 : config.paymentFee.fixed;
+    const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
+    const referralRate = excludedFees.has("referralFee") ? 0 : options.referralRateOverride ?? config.referralFees[0]?.rate ?? 0;
+    const paymentRate = excludedFees.has("paymentFee") ? 0 : paymentFeeConfig.percentage;
+    const paymentFixed = excludedFees.has("paymentFee") ? 0 : paymentFeeConfig.fixed;
     const shipping = excludedFees.has("shippingCost") ? 0 : shippingCost;
     const percentageOfSaleCustomRates = options.customFees.filter((f) => f.type === "percentage_of_sale").reduce((sum, f) => sum + f.value, 0);
     const fixedCustomFees = options.customFees.filter((f) => f.type === "fixed_per_item").reduce((sum, f) => sum + f.value, 0);
@@ -652,10 +657,39 @@
     } = inputs;
     const safeUom = uom <= 0 ? 1 : uom;
     const unitCost = roundPence(costPerBatch / safeUom * qtyRequired * (1 - discountRate));
+    const vatFixedAmount = vatOnSellingPrice.mode === "fixed" ? vatOnSellingPrice.amount : 0;
+    const adFixedAmount = adCost.mode === "fixed" ? adCost.amount : 0;
     const costPrice = roundPence(
-      unitCost + packingMaterials + (ppIncludedInPrice ? ppCost : 0) + vatOnSellingPrice + listingFee + adCost
+      unitCost + packingMaterials + (ppIncludedInPrice ? ppCost : 0) + vatFixedAmount + listingFee + adFixedAmount
     );
     const shippingCost = ppIncludedInPrice ? 0 : ppCost;
+    const generatedCustomFees = [];
+    if (vatOnSellingPrice.mode === "rate") {
+      generatedCustomFees.push({
+        id: "ebay-vat-slice",
+        label: "VAT on selling price",
+        type: "percentage_of_sale",
+        value: vatOnSellingPrice.rate
+      });
+    }
+    if (adCost.mode === "rate") {
+      generatedCustomFees.push({
+        id: "ebay-ad-cost-rate",
+        label: "Ad / promoted listings",
+        type: "percentage_of_sale",
+        value: adCost.rate
+      });
+    }
+    const vatFormula = vatOnSellingPrice.mode === "fixed" ? { label: "VAT on selling price", formula: "entered amount", amount: vatFixedAmount } : {
+      label: "VAT on selling price",
+      formula: `${(vatOnSellingPrice.rate * 100).toFixed(2)}% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation`,
+      amount: 0
+    };
+    const adFormula = adCost.mode === "fixed" ? { label: "Ad / promoted listings cost", formula: "fixed amount", amount: adFixedAmount } : {
+      label: "Ad / promoted listings cost",
+      formula: `${(adCost.rate * 100).toFixed(2)}% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation`,
+      amount: 0
+    };
     const formulas = [
       {
         label: "Unit cost",
@@ -672,24 +706,16 @@
         formula: ppIncludedInPrice ? "added to cost price" : "excluded from cost price, returned as shippingCost instead",
         amount: ppCost
       },
-      {
-        label: "VAT on selling price",
-        formula: "entered amount",
-        amount: vatOnSellingPrice
-      },
+      vatFormula,
       {
         label: "Listing fee",
         formula: "fixed per listing",
         amount: listingFee
       },
-      {
-        label: "Ad / promoted listings cost",
-        formula: "fixed amount",
-        amount: adCost
-      },
+      adFormula,
       {
         label: "Cost price",
-        formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatOnSellingPrice} + ${listingFee} + ${adCost}`,
+        formula: `${unitCost} + ${packingMaterials} + ${ppIncludedInPrice ? ppCost : 0} + ${vatFixedAmount} + ${listingFee} + ${adFixedAmount}`,
         amount: costPrice
       },
       {
@@ -698,7 +724,7 @@
         amount: shippingCost
       }
     ];
-    return { costPrice, shippingCost, unitCost, formulas };
+    return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas };
   }
 
   // src/ui/icons.ts
@@ -811,6 +837,16 @@
     el("manual-cost-group").style.display = isEbay ? "none" : "block";
     el("ebay-fees-group").style.display = isEbay ? "block" : "none";
   }
+  function readEbayFeeInput(modeId, valueId) {
+    const mode = el(modeId).value;
+    const raw = el(valueId).value;
+    return mode === "rate" ? { mode: "rate", rate: percentageToRate(raw) } : { mode: "fixed", amount: poundsToPence(raw) };
+  }
+  function updateEbayFeeInputLabel(modeId, valueLabelId, valueInputId, fixedPlaceholder, ratePlaceholder) {
+    const mode = el(modeId).value;
+    el(valueLabelId).textContent = mode === "rate" ? "Rate (%)" : "Amount (\xA3)";
+    el(valueInputId).placeholder = mode === "rate" ? ratePlaceholder : fixedPlaceholder;
+  }
   function applyEbayCostBuilder() {
     const ppIncluded = el("ebay-pp-included").checked;
     const result = buildEbayCost({
@@ -821,9 +857,9 @@
       packingMaterials: poundsToPence(el("ebay-packing-materials").value),
       ppCost: poundsToPence(el("ebay-pp-cost").value),
       ppIncludedInPrice: ppIncluded,
-      vatOnSellingPrice: poundsToPence(el("ebay-vat-amount").value),
+      vatOnSellingPrice: readEbayFeeInput("ebay-vat-mode", "ebay-vat-value"),
       listingFee: poundsToPence(el("ebay-listing-fee").value),
-      adCost: poundsToPence(el("ebay-ad-cost").value)
+      adCost: readEbayFeeInput("ebay-ad-mode", "ebay-ad-value")
     });
     el("cost-price-ebay").value = String(result.costPrice);
     el("shipping-cost-ebay").value = String(result.shippingCost);
@@ -900,7 +936,7 @@
       vatRate: 0.2,
       fulfilmentModeId: el("fulfilment-mode").value,
       shippingCost,
-      customFees,
+      customFees: lastEbayCostResult ? [...customFees, ...lastEbayCostResult.generatedCustomFees] : customFees,
       excludedFees: readExcludedFees()
     };
     if (!isNaN(weightRaw)) opts.weightGrams = weightRaw;
@@ -1090,6 +1126,13 @@
     el("mode-calculate").addEventListener("click", () => setMode("calculate"));
     el("mode-solve").addEventListener("click", () => setMode("solve"));
     el("target-mode").addEventListener("change", updateTargetInputLabel);
+    el("ebay-vat-mode").addEventListener("change", () => updateEbayFeeInputLabel("ebay-vat-mode", "ebay-vat-value-label", "ebay-vat-value", "4.00", "16.67"));
+    el("ebay-ad-mode").addEventListener("change", () => updateEbayFeeInputLabel("ebay-ad-mode", "ebay-ad-value-label", "ebay-ad-value", "0.50", "5"));
+    el("ebay-vat-preset-btn").addEventListener("click", () => {
+      el("ebay-vat-mode").value = "rate";
+      el("ebay-vat-value").value = ((1 - 1 / 1.2) * 100).toFixed(4);
+      updateEbayFeeInputLabel("ebay-vat-mode", "ebay-vat-value-label", "ebay-vat-value", "4.00", "16.67");
+    });
     el("add-fee-btn").addEventListener("click", addCustomFee);
     el("summary-btn").addEventListener("click", openSummarySheet);
     el("summary-close").addEventListener("click", closeSummarySheet);

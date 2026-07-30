@@ -18,11 +18,19 @@ import { calcVatOnFees } from './vat';
  * Find the applicable referral fee for a given selling price.
  * Tiers are evaluated in order; the first matching upTo wins.
  * A tier with no upTo is the catch-all.
+ *
+ * rateOverride, when given, bypasses the configured tiers/minimum entirely
+ * and charges a single flat rate for this calculation only.
  */
 function calcReferralFee(
   sellingPrice: number,
   config: MarketplaceConfig,
+  rateOverride?: number,
 ): { fee: number; rate: number; minimum: number } {
+  if (rateOverride !== undefined) {
+    return { fee: roundPence(sellingPrice * rateOverride), rate: rateOverride, minimum: 0 };
+  }
+
   const tier = config.referralFees.find(
     (t) => t.upTo === undefined || sellingPrice <= t.upTo,
   );
@@ -109,13 +117,14 @@ export function calculateFeesWithTrace(
 ): CalculationResult {
   const { sellingPrice, costPrice, vatRegistered, vatRate, excludedFees } = options;
 
-  const referral = calcReferralFee(sellingPrice, config);
+  const referral = calcReferralFee(sellingPrice, config, options.referralRateOverride);
   const referralFee = excludedFees.has('referralFee') ? 0 : referral.fee;
 
   const closingFee = config.closingFee;
 
+  const paymentFeeConfig = options.paymentFeeOverride ?? config.paymentFee;
   const rawPaymentFee = roundPence(
-    sellingPrice * config.paymentFee.percentage + config.paymentFee.fixed,
+    sellingPrice * paymentFeeConfig.percentage + paymentFeeConfig.fixed,
   );
   const paymentFee = excludedFees.has('paymentFee') ? 0 : rawPaymentFee;
 
@@ -182,9 +191,9 @@ export function calculateFeesWithTrace(
     ? `${sellingPrice} × ${referral.rate} = ${roundPence(sellingPrice * referral.rate)} → minimum applies`
     : `${sellingPrice} × ${referral.rate}`;
 
-  const paymentFormula = config.paymentFee.fixed > 0
-    ? `${sellingPrice} × ${config.paymentFee.percentage} + ${config.paymentFee.fixed}`
-    : `${sellingPrice} × ${config.paymentFee.percentage}`;
+  const paymentFormula = paymentFeeConfig.fixed > 0
+    ? `${sellingPrice} × ${paymentFeeConfig.percentage} + ${paymentFeeConfig.fixed}`
+    : `${sellingPrice} × ${paymentFeeConfig.percentage}`;
 
   const vatFormula = !config.vatOnFees
     ? 'not applicable for this marketplace'
@@ -211,8 +220,8 @@ export function calculateFeesWithTrace(
     referralFee: referral.fee,
     referralExcluded: excludedFees.has('referralFee'),
     closingFee,
-    paymentPercentage: config.paymentFee.percentage,
-    paymentFixed: config.paymentFee.fixed,
+    paymentPercentage: paymentFeeConfig.percentage,
+    paymentFixed: paymentFeeConfig.fixed,
     paymentFee: rawPaymentFee,
     paymentExcluded: excludedFees.has('paymentFee'),
     fulfilmentFee: rawFulfilmentFee,

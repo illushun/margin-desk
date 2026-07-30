@@ -97,9 +97,9 @@ curl -H "Authorization: Bearer $API_KEY" localhost:3000/api/marketplaces
       "id": "ebay-uk",
       "name": "eBay UK",
       "currency": "GBP",
-      "referralFees": [{ "rate": 0.119 }],
+      "referralFees": [{ "rate": 0.129 }],
       "closingFee": 0,
-      "paymentFee": { "percentage": 0.003, "fixed": 30 },
+      "paymentFee": { "percentage": 0, "fixed": 36 },
       "vatOnFees": true,
       "fulfilmentModes": [{ "id": "self", "label": "Self-fulfilled", "fee": 0 }]
     },
@@ -122,9 +122,9 @@ curl -H "Authorization: Bearer $API_KEY" localhost:3000/api/marketplaces/ebay-uk
   "id": "ebay-uk",
   "name": "eBay UK",
   "currency": "GBP",
-  "referralFees": [{ "rate": 0.119 }],
+  "referralFees": [{ "rate": 0.129 }],
   "closingFee": 0,
-  "paymentFee": { "percentage": 0.003, "fixed": 30 },
+  "paymentFee": { "percentage": 0, "fixed": 36 },
   "vatOnFees": true,
   "fulfilmentModes": [{ "id": "self", "label": "Self-fulfilled", "fee": 0 }]
 }
@@ -152,18 +152,18 @@ curl -X POST localhost:3000/api/calculate \
 {
   "breakdown": {
     "sellingPrice": 2499,
-    "referralFee": 297,
+    "referralFee": 322,
     "closingFee": 0,
-    "paymentFee": 37,
+    "paymentFee": 36,
     "fulfilmentFee": 0,
     "vatOnFees": 0,
     "shippingCost": 350,
     "customFees": [],
-    "totalFees": 684,
+    "totalFees": 708,
     "costPrice": 850,
-    "netProfit": 965,
-    "netMargin": 38.62,
-    "roi": 113.53
+    "netProfit": 941,
+    "netMargin": 37.66,
+    "roi": 110.71
   }
 }
 ```
@@ -172,14 +172,14 @@ Add `?trace=true` to the URL to include a `trace` object alongside `breakdown`, 
 
 ```json
 "formulas": [
-  { "label": "Referral fee", "formula": "2499 × 0.119", "amount": 297, "excluded": false },
+  { "label": "Referral fee", "formula": "2499 × 0.129", "amount": 322, "excluded": false },
   { "label": "Closing fee", "formula": "fixed per item", "amount": 0 },
-  { "label": "Payment processing fee", "formula": "2499 × 0.003 + 30", "amount": 37, "excluded": false },
+  { "label": "Payment processing fee", "formula": "2499 × 0 + 36", "amount": 36, "excluded": false },
   { "label": "Fulfilment fee", "formula": "weight/mode lookup", "amount": 0, "excluded": false },
   { "label": "Shipping cost", "formula": "entered amount", "amount": 350, "excluded": false },
   { "label": "VAT on fees", "formula": "not applicable (not VAT registered)", "amount": 0, "excluded": false },
-  { "label": "Total deductions", "formula": "all fees + cost price", "amount": 1534 },
-  { "label": "Net profit", "formula": "2499 − 1534", "amount": 965 }
+  { "label": "Total deductions", "formula": "all fees + cost price", "amount": 1558 },
+  { "label": "Net profit", "formula": "2499 − 1558", "amount": 941 }
 ]
 ```
 
@@ -213,8 +213,8 @@ The response always includes a `trace` object alongside `requiredSellingPrice`, 
 
 ```json
 "formulas": [
-  { "label": "Starting price estimate", "formula": "1230 ÷ (1 − 0.119 − 0.003 − 0 − 0.2)", "amount": 1814 },
-  { "label": "Target profit", "formula": "1814 × 0.2", "amount": 363 }
+  { "label": "Starting price estimate", "formula": "1236 ÷ (1 − 0.129 − 0 − 0 − 0.2)", "amount": 1842 },
+  { "label": "Target profit", "formula": "1843 × 0.2", "amount": 369 }
 ]
 ```
 
@@ -223,6 +223,8 @@ For a fixed profit target, `Target profit` is just `"fixed target amount"` since
 ### `POST /api/ebay-cost`
 
 Runs the eBay cost builder (supplier pricing to true unit cost) independently of a full calculation. Useful when you want to show a seller their true unit cost before they commit to a selling price.
+
+`vatOnSellingPrice` and `adCost` each take an object rather than a plain number, because either can be a fixed pence amount or a rate applied to the selling price: `{ "mode": "fixed", "amount": 0 }` (pence) or `{ "mode": "rate", "rate": 0 }` (decimal, e.g. `0.05` for 5%). A rate can't be pre-calculated into a pence amount here, since that would mean already knowing the selling price this endpoint is helping to cost -- so rate-mode fees come back in `generatedCustomFees` instead of being folded into `costPrice`, and the caller merges them into `customFees` before calling `/api/calculate` or `/api/solve`, where they're handled as ordinary `percentage_of_sale` fees.
 
 ```bash
 curl -X POST localhost:3000/api/ebay-cost \
@@ -236,32 +238,39 @@ curl -X POST localhost:3000/api/ebay-cost \
     "packingMaterials": 30,
     "ppCost": 350,
     "ppIncludedInPrice": false,
-    "vatOnSellingPrice": 0,
-    "listingFee": 0,
-    "adCost": 0
+    "vatOnSellingPrice": { "mode": "rate", "rate": 0.1667 },
+    "listingFee": 36,
+    "adCost": { "mode": "rate", "rate": 0.05 }
   }'
 ```
 
-That's a £12 pack of 12 units, one unit needed per listing, a 10% supplier discount, 30p of packing materials, and £3.50 postage charged separately rather than baked into the price:
+That's a £12 pack of 12 units, one unit needed per listing, a 10% supplier discount, 30p of packing materials, £3.50 postage charged separately, a flat 36p listing fee, and VAT/ad cost both expressed as rates rather than guessed pence amounts:
 
 ```json
 {
-  "costPrice": 120,
+  "costPrice": 156,
   "shippingCost": 350,
   "unitCost": 90,
+  "generatedCustomFees": [
+    { "id": "ebay-vat-slice", "label": "VAT on selling price", "type": "percentage_of_sale", "value": 0.1667 },
+    { "id": "ebay-ad-cost-rate", "label": "Ad / promoted listings", "type": "percentage_of_sale", "value": 0.05 }
+  ],
   "formulas": [
     { "label": "Unit cost", "formula": "(1200 ÷ 12) × 1 × (1 − 0.1)", "amount": 90 },
     { "label": "Packing materials", "formula": "fixed per item", "amount": 30 },
     { "label": "P+P (charged as shipping)", "formula": "excluded from cost price, returned as shippingCost instead", "amount": 350 },
-    { "label": "VAT on selling price", "formula": "entered amount", "amount": 0 },
-    { "label": "Listing fee", "formula": "fixed per listing", "amount": 0 },
-    { "label": "Ad / promoted listings cost", "formula": "fixed amount", "amount": 0 },
-    { "label": "Cost price", "formula": "90 + 30 + 0 + 0 + 0 + 0", "amount": 120 }
+    { "label": "VAT on selling price", "formula": "16.67% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation", "amount": 0 },
+    { "label": "Listing fee", "formula": "fixed per listing", "amount": 36 },
+    { "label": "Ad / promoted listings cost", "formula": "5.00% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation", "amount": 0 },
+    { "label": "Cost price", "formula": "90 + 30 + 0 + 0 + 36 + 0", "amount": 156 },
+    { "label": "Shipping cost", "formula": "350 (P+P charged separately)", "amount": 350 }
   ]
 }
 ```
 
-`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`. `formulas` is a line-by-line breakdown of how `costPrice` was built, all amounts in pence, so callers can render a "show your working" view without reimplementing the cost builder's maths themselves. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
+Pass `{ "mode": "fixed", "amount": 400 }` instead when VAT or ad cost is a pence amount you already know; it folds straight into `costPrice` as before and `generatedCustomFees` comes back empty for that field. `listingFee` stays a plain pence number, since eBay's listing fee is always a flat per-listing charge, never a rate.
+
+`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`; `generatedCustomFees` (if non-empty) gets appended to that request's `customFees` array. `formulas` is a line-by-line breakdown of how `costPrice` was built, all amounts in pence, so callers can render a "show your working" view without reimplementing the cost builder's maths themselves. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
 
 ### Shared request fields
 
@@ -278,6 +287,8 @@ Both `/api/calculate` and `/api/solve` accept:
 | `weightGrams` | number | required only when the fulfilment mode uses weight bands |
 | `customFees` | array | `{ id, label, type, value }`, see `src/types.ts` |
 | `excludedFees` | array | any of `referralFee`, `paymentFee`, `fulfilmentFee`, `vatOnFees`, `shippingCost` |
+| `referralRateOverride` | number | optional decimal rate, e.g. `0.129`. Replaces the marketplace's configured referral fee (tiers and minimum included) with a single flat rate for this calculation only. |
+| `paymentFeeOverride` | object | optional `{ percentage, fixed }` (fixed in pence), e.g. `{ "percentage": 0, "fixed": 36 }`. Replaces the marketplace's configured payment fee for this calculation only. |
 
 Errors come back as `{ "error": "message" }` with an appropriate status code (`400` for a bad request, `404` for an unknown marketplace or route).
 
