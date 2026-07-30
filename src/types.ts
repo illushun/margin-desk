@@ -174,6 +174,7 @@ export interface EbayCostBuilderResult {
   unitCost: number;           // ((cost / UoM) * qty) * (1 - disc) -- shown in breakdown
   generatedCustomFees: CustomFee[]; // rate-mode VAT/ad cost, to merge into CalculationOptions.customFees
   formulas: FormulaLine[]; // line-by-line working, so callers can show it without reimplementing the maths
+  formulaText: string; // plain-text "Unit cost + Packing materials + ... = Cost price" reading of the above
 }
 
 export interface FeeTrace {

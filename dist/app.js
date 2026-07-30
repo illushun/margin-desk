@@ -542,13 +542,14 @@
     </tr>
   `;
   }
-  function section(title, rows) {
+  function section(title, rows, extra = "") {
     return `
     <div class="debug-section">
       <p class="debug-section-title">${title}</p>
       <table class="debug-table">
         <tbody>${rows}</tbody>
       </table>
+      ${extra}
     </div>
   `;
   }
@@ -571,7 +572,7 @@
         </tr>
       ` : row(f.label, f.formula, gbp(f.amount));
     }
-    return section("Cost Builder", rows);
+    return section("Cost Builder", rows, `<p class="breakdown-formula" style="margin-top:0.75rem;">${t.formulaText}</p>`);
   }
   var FEE_TRACE_HIDE_IF_ZERO = /* @__PURE__ */ new Set([
     "Closing fee",
@@ -659,6 +660,16 @@
   }
 
   // src/marketplaces/ebay-cost-builder.ts
+  function buildCostFormulaText(unitCost, packingMaterials, ppIncludedInPrice, ppCost, vatFixedAmount, listingFee, adFixedAmount, costPrice) {
+    const terms = [{ label: "Unit cost", amount: unitCost }];
+    if (packingMaterials > 0) terms.push({ label: "Packing materials", amount: packingMaterials });
+    if (ppIncludedInPrice && ppCost > 0) terms.push({ label: "P+P", amount: ppCost });
+    if (vatFixedAmount > 0) terms.push({ label: "VAT on selling price", amount: vatFixedAmount });
+    if (listingFee > 0) terms.push({ label: "Listing fee", amount: listingFee });
+    if (adFixedAmount > 0) terms.push({ label: "Ad / promoted listings cost", amount: adFixedAmount });
+    const chain = terms.map((t, i) => i === 0 ? `${t.label} (${formatGBP(t.amount)})` : `+ ${t.label} (${formatGBP(t.amount)})`).join(" ");
+    return `${chain} = Cost price (${formatGBP(costPrice)})`;
+  }
   function buildEbayCost(inputs) {
     const {
       costPerBatch,
@@ -741,7 +752,17 @@
         amount: shippingCost
       }
     ];
-    return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas };
+    const formulaText = buildCostFormulaText(
+      unitCost,
+      packingMaterials,
+      ppIncludedInPrice,
+      ppCost,
+      vatFixedAmount,
+      listingFee,
+      adFixedAmount,
+      costPrice
+    );
+    return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas, formulaText };
   }
 
   // src/ui/icons.ts

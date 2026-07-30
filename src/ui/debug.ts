@@ -20,13 +20,14 @@ function row(label: string, formula: string, result: string, excluded = false): 
   `;
 }
 
-function section(title: string, rows: string): string {
+function section(title: string, rows: string, extra = ''): string {
   return `
     <div class="debug-section">
       <p class="debug-section-title">${title}</p>
       <table class="debug-table">
         <tbody>${rows}</tbody>
       </table>
+      ${extra}
     </div>
   `;
 }
@@ -60,7 +61,7 @@ function renderEbayCostTrace(t: EbayCostBuilderResult): string {
       : row(f.label, f.formula, gbp(f.amount));
   }
 
-  return section('Cost Builder', rows);
+  return section('Cost Builder', rows, `<p class="breakdown-formula" style="margin-top:0.75rem;">${t.formulaText}</p>`);
 }
 
 const FEE_TRACE_HIDE_IF_ZERO = new Set([

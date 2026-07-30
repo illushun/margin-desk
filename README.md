@@ -267,13 +267,16 @@ That's a £12 pack of 12 units, one unit needed per listing, a 10% supplier disc
     { "label": "Ad / promoted listings cost", "formula": "5.00% of selling price -- applied as a percentage-of-sale fee, see Fee Calculation", "amount": 0 },
     { "label": "Cost price", "formula": "90 + 30 + 0 + 0 + 36 + 0", "amount": 156 },
     { "label": "Shipping cost", "formula": "350 (P+P charged separately)", "amount": 350 }
-  ]
+  ],
+  "formulaText": "Unit cost (£0.90) + Packing materials (£0.30) + Listing fee (£0.36) = Cost price (£1.56)"
 }
 ```
 
 Pass `{ "mode": "fixed", "amount": 400 }` instead when VAT or ad cost is a pence amount you already know; it folds straight into `costPrice` as before and `generatedCustomFees` comes back empty for that field. `listingFee` stays a plain pence number, since eBay's listing fee is always a flat per-listing charge, never a rate.
 
-`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`; `generatedCustomFees` (if non-empty) gets appended to that request's `customFees` array. `formulas` is a line-by-line breakdown of how `costPrice` was built, all amounts in pence, so callers can render a "show your working" view without reimplementing the cost builder's maths themselves. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
+`costPrice` and `shippingCost` feed straight into `/api/calculate` or `/api/solve` as `costPrice` and `shippingCost`; `generatedCustomFees` (if non-empty) gets appended to that request's `customFees` array. `formulas` is a line-by-line breakdown of how `costPrice` was built, all amounts in pence, so callers can render a "show your working" view without reimplementing the cost builder's maths themselves.
+
+`formulaText` is the same chain reduced to one readable line -- note it only includes terms that actually sum into `costPrice`: P+P is skipped here because it was charged as shipping instead, and VAT/ad cost are skipped because they're rate-mode (their real amount doesn't exist until a selling price is known; see `generatedCustomFees` above). Zero-amount terms (e.g. packing materials left at £0) are omitted too, same as `/api/calculate`'s `formulaText`. See `src/marketplaces/ebay-cost-builder.ts` for the full input/output shape.
 
 ### Shared request fields
 

@@ -1,7 +1,39 @@
 import { roundPence } from '../utils/math';
+import { formatGBP } from '../utils/currency';
 import type { CustomFee, EbayCostBuilderInputs, EbayCostBuilderResult, EbayFeeInput, FormulaLine } from '../types';
 
 export type { EbayCostBuilderInputs, EbayCostBuilderResult, EbayFeeInput };
+
+/**
+ * Plain-text "Unit cost + Packing materials + ... = Cost price" reading of costPrice.
+ * Only includes terms that actually sum into costPrice: P+P is skipped when it's
+ * charged as shipping instead, and rate-mode VAT/ad cost contribute 0 here (their
+ * real amount only exists once a selling price is known -- see generatedCustomFees).
+ */
+function buildCostFormulaText(
+  unitCost: number,
+  packingMaterials: number,
+  ppIncludedInPrice: boolean,
+  ppCost: number,
+  vatFixedAmount: number,
+  listingFee: number,
+  adFixedAmount: number,
+  costPrice: number,
+): string {
+  const terms: { label: string; amount: number }[] = [{ label: 'Unit cost', amount: unitCost }];
+
+  if (packingMaterials > 0) terms.push({ label: 'Packing materials', amount: packingMaterials });
+  if (ppIncludedInPrice && ppCost > 0) terms.push({ label: 'P+P', amount: ppCost });
+  if (vatFixedAmount > 0) terms.push({ label: 'VAT on selling price', amount: vatFixedAmount });
+  if (listingFee > 0) terms.push({ label: 'Listing fee', amount: listingFee });
+  if (adFixedAmount > 0) terms.push({ label: 'Ad / promoted listings cost', amount: adFixedAmount });
+
+  const chain = terms
+    .map((t, i) => (i === 0 ? `${t.label} (${formatGBP(t.amount)})` : `+ ${t.label} (${formatGBP(t.amount)})`))
+    .join(' ');
+
+  return `${chain} = Cost price (${formatGBP(costPrice)})`;
+}
 
 /**
  * Calculate the true cost of an eBay listing from supplier pricing inputs.
@@ -124,5 +156,9 @@ export function buildEbayCost(inputs: EbayCostBuilderInputs): EbayCostBuilderRes
     },
   ];
 
-  return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas };
+  const formulaText = buildCostFormulaText(
+    unitCost, packingMaterials, ppIncludedInPrice, ppCost, vatFixedAmount, listingFee, adFixedAmount, costPrice,
+  );
+
+  return { costPrice, shippingCost, unitCost, generatedCustomFees, formulas, formulaText };
 }
