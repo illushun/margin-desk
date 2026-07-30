@@ -1,5 +1,6 @@
 import type { FeeBreakdown, SolverResult, ExcludableFee } from '../types';
 import { formatGBP } from '../utils/currency';
+import { buildBreakdownRows, buildFormulaText } from '../engine/breakdown-text';
 
 // ---------------------------------------------------------------------------
 // Count-up animation
@@ -38,47 +39,8 @@ function readExcluded(): Set<ExcludableFee> {
 // Breakdown table
 // ---------------------------------------------------------------------------
 
-interface Row {
-  label: string;
-  amount: number;
-  isDeduction?: boolean;
-  isSummary?: boolean;
-  isExcluded?: boolean;
-}
-
-function buildRows(b: FeeBreakdown, excluded: Set<ExcludableFee>): Row[] {
-  const rows: Row[] = [
-    { label: 'Selling price', amount: b.sellingPrice },
-    { label: 'Cost price', amount: b.costPrice, isDeduction: true },
-    { label: 'Referral fee', amount: b.referralFee, isDeduction: true, isExcluded: excluded.has('referralFee') },
-  ];
-
-  if (b.closingFee > 0) rows.push({ label: 'Closing fee', amount: b.closingFee, isDeduction: true });
-
-  rows.push({ label: 'Payment fee', amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has('paymentFee') });
-
-  if (b.fulfilmentFee > 0 || excluded.has('fulfilmentFee')) {
-    rows.push({ label: 'Fulfilment fee', amount: b.fulfilmentFee, isDeduction: true, isExcluded: excluded.has('fulfilmentFee') });
-  }
-
-  if (b.shippingCost > 0 || excluded.has('shippingCost')) {
-    rows.push({ label: 'Shipping', amount: b.shippingCost, isDeduction: true, isExcluded: excluded.has('shippingCost') });
-  }
-
-  if (b.vatOnFees > 0 || excluded.has('vatOnFees')) {
-    rows.push({ label: 'VAT on fees', amount: b.vatOnFees, isDeduction: true, isExcluded: excluded.has('vatOnFees') });
-  }
-
-  for (const fee of b.customFees) {
-    rows.push({ label: fee.label, amount: fee.amount, isDeduction: true });
-  }
-
-  rows.push({ label: 'Total deductions', amount: b.totalFees + b.costPrice, isSummary: true });
-  return rows;
-}
-
 function buildBreakdownHTML(b: FeeBreakdown, excluded: Set<ExcludableFee>): string {
-  const rows = buildRows(b, excluded);
+  const rows = buildBreakdownRows(b, excluded);
   const tableRows = rows.map((r) => {
     let cls = '';
     if (r.isDeduction) cls = 'deduction';
@@ -127,6 +89,9 @@ export function renderBreakdown(container: HTMLElement, breakdown: FeeBreakdown)
     <p class="breakdown-section-title">Breakdown</p>
     ${buildBreakdownHTML(breakdown, excluded)}
 
+    <p class="breakdown-section-title">As a formula</p>
+    <p class="breakdown-formula">${buildFormulaText(breakdown, excluded)}</p>
+
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;
 
@@ -164,6 +129,9 @@ export function renderSolverResult(container: HTMLElement, result: SolverResult)
 
     <p class="breakdown-section-title">Breakdown</p>
     ${buildBreakdownHTML(result.breakdown, excluded)}
+
+    <p class="breakdown-section-title">As a formula</p>
+    <p class="breakdown-formula">${buildFormulaText(result.breakdown, excluded)}</p>
 
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;

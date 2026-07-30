@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { getMarketplace, listMarketplaces } from '../marketplaces';
 import { calculateFees, calculateFeesWithTrace } from '../engine/fees';
 import { solveForPrice } from '../engine/solver';
+import { buildFormulaText } from '../engine/breakdown-text';
 import { buildEbayCost } from '../marketplaces/ebay-cost-builder';
 import type {
   CalculationOptions,
@@ -213,8 +214,13 @@ function handleCalculate(body: unknown, withTrace: boolean) {
     sellingPrice: requireNumber(body, 'sellingPrice'),
   };
 
-  if (withTrace) return calculateFeesWithTrace(config, options);
-  return { breakdown: calculateFees(config, options) };
+  if (withTrace) {
+    const { breakdown, trace } = calculateFeesWithTrace(config, options);
+    return { breakdown, trace, formulaText: buildFormulaText(breakdown, options.excludedFees) };
+  }
+
+  const breakdown = calculateFees(config, options);
+  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees) };
 }
 
 const VALID_TARGET_MODES: SolverTargetMode[] = ['fixed', 'margin'];
@@ -235,7 +241,8 @@ function handleSolve(body: unknown) {
     targetMargin: optionalNumber(body, 'targetMargin', 0),
   };
 
-  return solveForPrice(config, options);
+  const result = solveForPrice(config, options);
+  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees) };
 }
 
 function handleEbayCost(body: unknown) {

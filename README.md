@@ -164,11 +164,14 @@ curl -X POST localhost:3000/api/calculate \
     "netProfit": 941,
     "netMargin": 37.66,
     "roi": 110.71
-  }
+  },
+  "formulaText": "Selling price (£24.99) − Cost price (£8.50) − Referral fee (£3.22) − Payment fee (£0.36) − Shipping (£3.50) = Net profit (£9.41)"
 }
 ```
 
-Add `?trace=true` to the URL to include a `trace` object alongside `breakdown`, with every raw fee component plus a `trace.formulas` array covering the whole calculation line by line, same shape as the eBay cost builder and solver:
+`formulaText` is a single human-readable line chaining every non-zero, non-excluded deduction into one subtraction, ending in the net profit -- the same thing the app's own "As a formula" panel shows, so a caller can display it directly without reassembling it from `breakdown`'s individual fields. It's always present, on both `/api/calculate` (with or without `?trace=true`) and `/api/solve`.
+
+Add `?trace=true` to the URL to include a `trace` object alongside `breakdown` and `formulaText`, with every raw fee component plus a `trace.formulas` array covering the whole calculation line by line, same shape as the eBay cost builder and solver:
 
 ```json
 "formulas": [
@@ -209,7 +212,7 @@ or, for a margin target:
 
 See the full worked example below.
 
-The response always includes a `trace` object alongside `requiredSellingPrice`, `breakdown`, and `converged` (no `?trace=true` needed, unlike `/api/calculate`). `trace.formulas` explains how the starting price estimate and the target profit were derived, e.g. for a margin target:
+The response always includes a `trace` object alongside `requiredSellingPrice`, `breakdown`, `converged`, and `formulaText` (no `?trace=true` needed, unlike `/api/calculate`) -- `formulaText` here reads the same way, but against the solved-for price rather than a supplied one, e.g. `"Selling price (£18.43) − Cost price (£8.50) − Referral fee (£2.38) − Payment fee (£0.36) − Shipping (£3.50) = Net profit (£3.69)"`. `trace.formulas` explains how the starting price estimate and the target profit were derived, e.g. for a margin target:
 
 ```json
 "formulas": [
@@ -447,6 +450,7 @@ margin-desk/
       fees.ts               calculateFees(config, options) -> FeeBreakdown
       solver.ts             solveForPrice(config, options) -> SolverResult
       vat.ts                VAT on fees helper
+      breakdown-text.ts     buildFormulaText(breakdown, excludedFees) -> plain-text formula string
     api/
       server.ts             HTTP API wrapping the engine
     ui/

@@ -361,6 +361,48 @@ function solveForPrice(config, options) {
   return { requiredSellingPrice: price, breakdown, converged: false, trace };
 }
 
+// src/utils/currency.ts
+function formatGBP(pence) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP"
+  }).format(pence / 100);
+}
+
+// src/engine/breakdown-text.ts
+function buildBreakdownRows(b, excluded) {
+  const rows = [
+    { label: "Selling price", amount: b.sellingPrice },
+    { label: "Cost price", amount: b.costPrice, isDeduction: true },
+    { label: "Referral fee", amount: b.referralFee, isDeduction: true, isExcluded: excluded.has("referralFee") }
+  ];
+  if (b.closingFee > 0) rows.push({ label: "Closing fee", amount: b.closingFee, isDeduction: true });
+  rows.push({ label: "Payment fee", amount: b.paymentFee, isDeduction: true, isExcluded: excluded.has("paymentFee") });
+  if (b.fulfilmentFee > 0 || excluded.has("fulfilmentFee")) {
+    rows.push({ label: "Fulfilment fee", amount: b.fulfilmentFee, isDeduction: true, isExcluded: excluded.has("fulfilmentFee") });
+  }
+  if (b.shippingCost > 0 || excluded.has("shippingCost")) {
+    rows.push({ label: "Shipping", amount: b.shippingCost, isDeduction: true, isExcluded: excluded.has("shippingCost") });
+  }
+  if (b.vatOnFees > 0 || excluded.has("vatOnFees")) {
+    rows.push({ label: "VAT on fees", amount: b.vatOnFees, isDeduction: true, isExcluded: excluded.has("vatOnFees") });
+  }
+  for (const fee of b.customFees) {
+    rows.push({ label: fee.label, amount: fee.amount, isDeduction: true });
+  }
+  rows.push({ label: "Total deductions", amount: b.totalFees + b.costPrice, isSummary: true });
+  return rows;
+}
+function buildFormulaText(b, excluded) {
+  const terms = buildBreakdownRows(b, excluded).filter((r) => !r.isSummary && !r.isExcluded);
+  const chain = terms.map((r, i) => {
+    const amt = formatGBP(r.amount);
+    if (i === 0) return `${r.label} (${amt})`;
+    return `${r.isDeduction ? "\u2212" : "+"} ${r.label} (${amt})`;
+  }).join(" ");
+  return `${chain} = Net profit (${formatGBP(b.netProfit)})`;
+}
+
 // src/marketplaces/ebay-cost-builder.ts
 function buildEbayCost(inputs) {
   const {
@@ -601,8 +643,12 @@ function handleCalculate(body, withTrace) {
     ...parseCommonOptions(body),
     sellingPrice: requireNumber(body, "sellingPrice")
   };
-  if (withTrace) return calculateFeesWithTrace(config, options);
-  return { breakdown: calculateFees(config, options) };
+  if (withTrace) {
+    const { breakdown: breakdown2, trace } = calculateFeesWithTrace(config, options);
+    return { breakdown: breakdown2, trace, formulaText: buildFormulaText(breakdown2, options.excludedFees) };
+  }
+  const breakdown = calculateFees(config, options);
+  return { breakdown, formulaText: buildFormulaText(breakdown, options.excludedFees) };
 }
 var VALID_TARGET_MODES = ["fixed", "margin"];
 function handleSolve(body) {
@@ -618,7 +664,8 @@ function handleSolve(body) {
     targetNetProfit: optionalNumber(body, "targetNetProfit", 0),
     targetMargin: optionalNumber(body, "targetMargin", 0)
   };
-  return solveForPrice(config, options);
+  const result = solveForPrice(config, options);
+  return { ...result, formulaText: buildFormulaText(result.breakdown, options.excludedFees) };
 }
 function handleEbayCost(body) {
   if (!isRecord(body)) throw new ApiError(400, "Request body must be a JSON object");

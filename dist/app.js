@@ -378,29 +378,8 @@
     return value / 100;
   }
 
-  // src/ui/render.ts
-  function animateCountUp(el2, targetPence, duration = 550) {
-    const isNegative = targetPence < 0;
-    const abs = Math.abs(targetPence);
-    const start = performance.now();
-    function tick(now) {
-      const p = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - p, 3);
-      el2.textContent = (isNegative ? "-" : "") + formatGBP(Math.round(abs * eased));
-      if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-  }
-  function readExcluded() {
-    const excluded = /* @__PURE__ */ new Set();
-    const ids = ["referralFee", "paymentFee", "fulfilmentFee", "vatOnFees", "shippingCost"];
-    for (const id of ids) {
-      const cb = document.getElementById(`exclude-${id}`);
-      if (cb?.checked) excluded.add(id);
-    }
-    return excluded;
-  }
-  function buildRows(b, excluded) {
+  // src/engine/breakdown-text.ts
+  function buildBreakdownRows(b, excluded) {
     const rows = [
       { label: "Selling price", amount: b.sellingPrice },
       { label: "Cost price", amount: b.costPrice, isDeduction: true },
@@ -423,8 +402,40 @@
     rows.push({ label: "Total deductions", amount: b.totalFees + b.costPrice, isSummary: true });
     return rows;
   }
+  function buildFormulaText(b, excluded) {
+    const terms = buildBreakdownRows(b, excluded).filter((r) => !r.isSummary && !r.isExcluded);
+    const chain = terms.map((r, i) => {
+      const amt = formatGBP(r.amount);
+      if (i === 0) return `${r.label} (${amt})`;
+      return `${r.isDeduction ? "\u2212" : "+"} ${r.label} (${amt})`;
+    }).join(" ");
+    return `${chain} = Net profit (${formatGBP(b.netProfit)})`;
+  }
+
+  // src/ui/render.ts
+  function animateCountUp(el2, targetPence, duration = 550) {
+    const isNegative = targetPence < 0;
+    const abs = Math.abs(targetPence);
+    const start = performance.now();
+    function tick(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el2.textContent = (isNegative ? "-" : "") + formatGBP(Math.round(abs * eased));
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function readExcluded() {
+    const excluded = /* @__PURE__ */ new Set();
+    const ids = ["referralFee", "paymentFee", "fulfilmentFee", "vatOnFees", "shippingCost"];
+    for (const id of ids) {
+      const cb = document.getElementById(`exclude-${id}`);
+      if (cb?.checked) excluded.add(id);
+    }
+    return excluded;
+  }
   function buildBreakdownHTML(b, excluded) {
-    const rows = buildRows(b, excluded);
+    const rows = buildBreakdownRows(b, excluded);
     const tableRows = rows.map((r) => {
       let cls = "";
       if (r.isDeduction) cls = "deduction";
@@ -462,6 +473,9 @@
     <p class="breakdown-section-title">Breakdown</p>
     ${buildBreakdownHTML(breakdown, excluded)}
 
+    <p class="breakdown-section-title">As a formula</p>
+    <p class="breakdown-formula">${buildFormulaText(breakdown, excluded)}</p>
+
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;
     const heroEl = container.querySelector("#hero-amount");
@@ -495,6 +509,9 @@
 
     <p class="breakdown-section-title">Breakdown</p>
     ${buildBreakdownHTML(result.breakdown, excluded)}
+
+    <p class="breakdown-section-title">As a formula</p>
+    <p class="breakdown-formula">${buildFormulaText(result.breakdown, excluded)}</p>
 
     <button class="btn-workings" id="open-workings">Show workings</button>
   `;
